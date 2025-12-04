@@ -1,0 +1,27 @@
+name: Aggiorna Playlist Gist
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'  # Ogni 30 minuti
+  workflow_dispatch:  # Permette esecuzione manuale
+
+jobs:
+  update-gist:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Scarica playlist dal Worker
+        run: |
+          curl -o playlists.json https://sport.alemagno1994alex.workers.dev
+          
+      - name: Processa e crea M3U
+        run: |
+          cat playlists.json | jq -r '.[].text' > merged.m3u
+          
+      - name: Aggiorna Gist
+        uses: exuanbo/actions-deploy-gist@v1
+        with:
+          token: ${{ secrets.GIST_TOKEN }}
+          gist_id: ${{ secrets.GIST_ID }}
+          file_path: merged.m3u
+          file_type: text
