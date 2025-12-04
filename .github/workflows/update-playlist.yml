@@ -2,26 +2,67 @@ name: Aggiorna Playlist Gist
 
 on:
   schedule:
-    - cron: '*/30 * * * *'  # Ogni 30 minuti
-  workflow_dispatch:  # Permette esecuzione manuale
+    - cron: '*/30 * * * *' # Controlla ogni 30 minuti
+  workflow_dispatch: # Permette esecuzione manuale
 
 jobs:
   update-gist:
     runs-on: ubuntu-latest
-    
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
       - name: Scarica playlist dal Worker
         run: |
           curl -o playlists.json https://sport.alemagno1994alex.workers.dev
-          
+
       - name: Processa e crea M3U
         run: |
           cat playlists.json | jq -r '.[].text' > merged.m3u
+
+      - name: Calcola hash del file
+        id: hash
+        run: |
+          NEW_HASH=$(md5sum merged.m3u | awk '{print $1}')
+          echo "new_hash=$NEW_HASH" >> $GITHUB_OUTPUT
           
+          # Recupera l'hash precedente (se esiste)
+          if [ -f last_hash.txt ]; then
+            OLD_HASH=$(cat last_hash.txt)
+            echo "old_hash=$OLD_HASH" >> $GITHUB_OUTPUT
+          else
+            echo "old_hash=none" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Verifica se ci sono cambiamenti
+        id: check
+        run: |
+          if [ "${{ steps.hash.outputs.new_hash }}" != "${{ steps.hash.outputs.old_hash }}" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "✅ Rilevati cambiamenti nel file!"
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ Nessun cambiamento rilevato"
+          fi
+
       - name: Aggiorna Gist
+        if: steps.check.outputs.changed == 'true'
         uses: exuanbo/actions-deploy-gist@v1
         with:
           token: ${{ secrets.GIST_TOKEN }}
           gist_id: ${{ secrets.GIST_ID }}
           file_path: merged.m3u
           file_type: text
+
+      - name: Salva nuovo hash
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          echo "${{ steps.hash.outputs.new_hash }}" > last_hash.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add last_hash.txt
+          git commit -m "Update hash [skip ci]"
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:${{ github.ref }}
