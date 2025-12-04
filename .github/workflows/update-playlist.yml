@@ -9,12 +9,6 @@ jobs:
   update-gist:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-
       - name: Scarica playlist dal Worker
         run: |
           curl -o playlists.json https://sport.alemagno1994alex.workers.dev
@@ -23,29 +17,36 @@ jobs:
         run: |
           cat playlists.json | jq -r '.[].text' > merged.m3u
 
-      - name: Calcola hash del file
-        id: hash
-        run: |
-          NEW_HASH=$(md5sum merged.m3u | awk '{print $1}')
-          echo "new_hash=$NEW_HASH" >> $GITHUB_OUTPUT
-          
-          # Recupera l'hash precedente (se esiste)
-          if [ -f last_hash.txt ]; then
-            OLD_HASH=$(cat last_hash.txt)
-            echo "old_hash=$OLD_HASH" >> $GITHUB_OUTPUT
-          else
-            echo "old_hash=none" >> $GITHUB_OUTPUT
-          fi
+      - name: Ripristina hash precedente dalla cache
+        id: cache
+        uses: actions/cache@v3
+        with:
+          path: last_hash.txt
+          key: playlist-hash-${{ github.run_id }}
+          restore-keys: |
+            playlist-hash-
 
-      - name: Verifica se ci sono cambiamenti
+      - name: Calcola hash e verifica cambiamenti
         id: check
         run: |
-          if [ "${{ steps.hash.outputs.new_hash }}" != "${{ steps.hash.outputs.old_hash }}" ]; then
+          NEW_HASH=$(md5sum merged.m3u | awk '{print $1}')
+          echo "new_hash=$NEW_HASH"
+          
+          if [ -f last_hash.txt ]; then
+            OLD_HASH=$(cat last_hash.txt)
+            echo "old_hash=$OLD_HASH"
+          else
+            OLD_HASH="none"
+            echo "old_hash=none (primo run)"
+          fi
+          
+          if [ "$NEW_HASH" != "$OLD_HASH" ]; then
             echo "changed=true" >> $GITHUB_OUTPUT
-            echo "✅ Rilevati cambiamenti nel file!"
+            echo "✅ Rilevati cambiamenti - Aggiornamento Gist..."
+            echo "$NEW_HASH" > last_hash.txt
           else
             echo "changed=false" >> $GITHUB_OUTPUT
-            echo "ℹ️ Nessun cambiamento rilevato"
+            echo "ℹ️ Nessun cambiamento - Skip aggiornamento"
           fi
 
       - name: Aggiorna Gist
@@ -56,13 +57,3 @@ jobs:
           gist_id: ${{ secrets.GIST_ID }}
           file_path: merged.m3u
           file_type: text
-
-      - name: Salva nuovo hash
-        if: steps.check.outputs.changed == 'true'
-        run: |
-          echo "${{ steps.hash.outputs.new_hash }}" > last_hash.txt
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add last_hash.txt
-          git commit -m "Update hash [skip ci]"
-          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:${{ github.ref }}
