@@ -2,20 +2,57 @@ name: Aggiorna Playlist Gist
 
 on:
   schedule:
-    - cron: '*/30 * * * *' # Controlla ogni 30 minuti
-  workflow_dispatch: # Permette esecuzione manuale
+    - cron: '0 */2 * * *' # Ogni 2 ore (12 volte al giorno)
+  workflow_dispatch:
 
 jobs:
   update-gist:
     runs-on: ubuntu-latest
     steps:
-      - name: Scarica playlist dal Worker
+      - name: Scarica playlist dal Worker con retry
         run: |
-          curl -o playlists.json https://sport.alemagno1994alex.workers.dev
+          MAX_RETRIES=3
+          RETRY_DELAY=30
+          
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "🔄 Tentativo $i di $MAX_RETRIES..."
+            
+            HTTP_CODE=$(curl -s -o playlists.json -w "%{http_code}" \
+              -H "User-Agent: GitHubAction-PlaylistUpdater/1.0" \
+              -H "Accept: application/json" \
+              https://sport.alemagno1994alex.workers.dev)
+            
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✅ Download completato con successo"
+              break
+            elif [ "$HTTP_CODE" = "429" ]; then
+              echo "⚠️ Rate limit raggiunto (429)"
+              if [ $i -lt $MAX_RETRIES ]; then
+                echo "⏳ Attendo ${RETRY_DELAY} secondi prima di ritentare..."
+                sleep $RETRY_DELAY
+                RETRY_DELAY=$((RETRY_DELAY * 2)) # Backoff esponenziale
+              else
+                echo "❌ Tutti i tentativi falliti"
+                exit 1
+              fi
+            else
+              echo "❌ Errore HTTP: $HTTP_CODE"
+              exit 1
+            fi
+          done
+
+      - name: Verifica file scaricato
+        run: |
+          if [ ! -s playlists.json ]; then
+            echo "❌ File playlists.json vuoto o non esistente"
+            exit 1
+          fi
+          echo "📊 Dimensione file: $(wc -c < playlists.json) bytes"
 
       - name: Processa e crea M3U
         run: |
           cat playlists.json | jq -r '.[].text' > merged.m3u
+          echo "📝 Righe M3U generate: $(wc -l < merged.m3u)"
 
       - name: Ripristina hash precedente dalla cache
         id: cache
@@ -30,14 +67,14 @@ jobs:
         id: check
         run: |
           NEW_HASH=$(md5sum merged.m3u | awk '{print $1}')
-          echo "new_hash=$NEW_HASH"
+          echo "🔢 Nuovo hash: $NEW_HASH"
           
           if [ -f last_hash.txt ]; then
             OLD_HASH=$(cat last_hash.txt)
-            echo "old_hash=$OLD_HASH"
+            echo "🔢 Vecchio hash: $OLD_HASH"
           else
             OLD_HASH="none"
-            echo "old_hash=none (primo run)"
+            echo "ℹ️ Primo run - nessun hash precedente"
           fi
           
           if [ "$NEW_HASH" != "$OLD_HASH" ]; then
@@ -57,3 +94,11 @@ jobs:
           gist_id: ${{ secrets.GIST_ID }}
           file_path: merged.m3u
           file_type: text
+
+      - name: Riepilogo finale
+        if: always()
+        run: |
+          echo "### 📊 Riepilogo Esecuzione" >> $GITHUB_STEP_SUMMARY
+          echo "- **Hash playlist**: $(md5sum merged.m3u | awk '{print $1}')" >> $GITHUB_STEP_SUMMARY
+          echo "- **Cambiamenti rilevati**: ${{ steps.check.outputs.changed }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Timestamp**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
