@@ -83,8 +83,10 @@ jobs:
           
           if curl -s -f -o existing.m3u "$GIST_URL"; then
             echo "✅ M3U esistente scaricato"
+            
+            CHANNEL_COUNT=$(grep -c "^#EXTINF" existing.m3u 2>/dev/null || echo 0)
+            echo "📊 Canali esistenti: $CHANNEL_COUNT"
             echo "exists=true" >> $GITHUB_OUTPUT
-            echo "📊 Righe esistenti: $(wc -l < existing.m3u)"
           else
             echo "ℹ️ Nessun M3U esistente (primo run o Gist vuoto)"
             echo "exists=false" >> $GITHUB_OUTPUT
@@ -93,10 +95,18 @@ jobs:
 
       - name: Processa e aggiorna M3U (mantieni fino a mezzanotte)
         run: |
-          # Estrai i nuovi canali dal JSON
+          echo "📥 Estrazione e concatenazione M3U dal JSON..."
+          
+          # Il JSON contiene array di oggetti con campo "text" che contiene M3U completi
+          # Concatena tutti i "text" rispettando i newline (\n)
           jq -r '.[].text' playlists.json > new_channels.m3u
           
-          NEW_COUNT=$(wc -l < new_channels.m3u)
+          # Rimuovi intestazioni #EXTM3U duplicate (mantieni solo la prima)
+          # e righe vuote multiple
+          awk 'BEGIN{first=1} /^#EXTM3U/{if(first){print; first=0; next} else next} /^$/{if(prev!=""){print; prev=""} next} {print; prev=$0}' new_channels.m3u > new_channels_clean.m3u
+          mv new_channels_clean.m3u new_channels.m3u
+          
+          NEW_COUNT=$(grep -c "^#EXTINF" new_channels.m3u 2>/dev/null || echo 0)
           echo "📝 Nuovi canali dal Worker: $NEW_COUNT"
           
           if [ $NEW_COUNT -eq 0 ]; then
@@ -108,57 +118,129 @@ jobs:
           CURRENT_HOUR=$(date -u +%H)
           echo "🕐 Ora corrente UTC: ${CURRENT_HOUR}:00"
           
+          # Funzione per estrarre l'identificatore univoco del canale
+          extract_channel_id() {
+            local line="$1"
+            # Estrai il nome dopo l'ultima virgola come identificatore
+            echo "$line" | sed -n 's/.*,\s*\(.*\)/\1/p'
+          }
+          
           # Se esiste un M3U precedente e non è ancora mezzanotte
           if [ -f existing.m3u ] && [ -s existing.m3u ] && [ "$CURRENT_HOUR" != "00" ]; then
             echo "🔄 Merge con canali esistenti (mantieni fino a mezzanotte)..."
             
-            # Crea una mappa dei canali per evitare duplicati
-            # Estrai gli ID/nomi dei canali (linea #EXTINF)
-            declare -A channel_map
+            # Inizia con l'header #EXTM3U
+            echo "#EXTM3U" > merged.m3u
+            echo "" >> merged.m3u
             
-            # Aggiungi prima i canali esistenti
+            # Array associativo per tracciare canali già inseriti
+            declare -A processed_channels
+            
+            # FASE 1: Aggiungi tutti i canali esistenti
+            echo "📺 Fase 1: Carico canali esistenti..."
+            OLD_COUNT=0
+            
             while IFS= read -r line; do
+              # Salta header e righe vuote nella fase di lettura
+              if [[ $line == "#EXTM3U"* ]] || [[ -z "$line" ]]; then
+                continue
+              fi
+              
               if [[ $line == "#EXTINF"* ]]; then
-                # Estrai l'identificatore del canale (es. nome dopo la virgola)
-                channel_id=$(echo "$line" | sed 's/.*,//')
-                if [ ! -z "$channel_id" ] && [ -z "${channel_map[$channel_id]}" ]; then
-                  channel_map[$channel_id]=1
+                channel_id=$(extract_channel_id "$line")
+                
+                if [ ! -z "$channel_id" ] && [ -z "${processed_channels[$channel_id]}" ]; then
+                  processed_channels[$channel_id]=1
+                  OLD_COUNT=$((OLD_COUNT + 1))
+                  
+                  # Scrivi la entry completa (EXTINF + successive righe fino al prossimo EXTINF o EOF)
                   echo "$line" >> merged.m3u
-                  # Leggi la linea URL successiva
-                  read -r url_line
-                  echo "$url_line" >> merged.m3u
+                  
+                  # Continua a leggere le righe successive fino al prossimo #EXTINF
+                  while IFS= read -r next_line; do
+                    if [[ $next_line == "#EXTINF"* ]]; then
+                      # Torna indietro di una riga (la gestiremo nel loop principale)
+                      echo "$next_line" | cat - > /tmp/pushback_line
+                      break
+                    fi
+                    echo "$next_line" >> merged.m3u
+                  done
+                  
+                  # Se c'è una riga pushback, rimettila nel flusso
+                  if [ -f /tmp/pushback_line ]; then
+                    cat /tmp/pushback_line
+                    rm /tmp/pushback_line
+                  fi
                 fi
               fi
             done < existing.m3u
             
-            OLD_COUNT=${#channel_map[@]}
-            echo "📺 Canali mantenuti dal precedente: $OLD_COUNT"
+            echo "✅ Canali mantenuti: $OLD_COUNT"
             
-            # Aggiungi/aggiorna con i nuovi canali
+            # FASE 2: Aggiungi nuovi canali
+            echo "🆕 Fase 2: Aggiungo nuovi canali..."
+            NEW_ADDED=0
+            UPDATED=0
+            
             while IFS= read -r line; do
+              # Salta header e righe vuote
+              if [[ $line == "#EXTM3U"* ]] || [[ $line == "#EXT-X-PLAYLIST-TYPE"* ]] || [[ -z "$line" ]]; then
+                continue
+              fi
+              
               if [[ $line == "#EXTINF"* ]]; then
-                channel_id=$(echo "$line" | sed 's/.*,//')
+                channel_id=$(extract_channel_id "$line")
+                
                 if [ ! -z "$channel_id" ]; then
-                  if [ -z "${channel_map[$channel_id]}" ]; then
-                    echo "➕ Nuovo canale: $channel_id"
+                  if [ -z "${processed_channels[$channel_id]}" ]; then
+                    echo "➕ Nuovo: $channel_id"
+                    processed_channels[$channel_id]=1
+                    NEW_ADDED=$((NEW_ADDED + 1))
+                    
+                    # Aggiungi separatore
+                    echo "" >> merged.m3u
+                    
+                    # Scrivi entry completa
+                    echo "$line" >> merged.m3u
+                    
+                    # Continua a leggere fino al prossimo #EXTINF
+                    while IFS= read -r next_line; do
+                      if [[ $next_line == "#EXTINF"* ]]; then
+                        echo "$next_line" | cat - > /tmp/pushback_line
+                        break
+                      fi
+                      echo "$next_line" >> merged.m3u
+                    done
+                    
+                    if [ -f /tmp/pushback_line ]; then
+                      cat /tmp/pushback_line
+                      rm /tmp/pushback_line
+                    fi
                   else
-                    echo "🔄 Aggiornamento canale: $channel_id"
+                    UPDATED=$((UPDATED + 1))
+                    # Salta questa entry (già presente)
+                    while IFS= read -r next_line; do
+                      if [[ $next_line == "#EXTINF"* ]]; then
+                        echo "$next_line" | cat - > /tmp/pushback_line
+                        break
+                      fi
+                    done
+                    
+                    if [ -f /tmp/pushback_line ]; then
+                      cat /tmp/pushback_line
+                      rm /tmp/pushback_line
+                    fi
                   fi
-                  channel_map[$channel_id]=1
                 fi
-                echo "$line" >> merged_temp.m3u
-                read -r url_line
-                echo "$url_line" >> merged_temp.m3u
               fi
             done < new_channels.m3u
             
-            # Se ci sono nuovi canali, sovrascrivi merged.m3u
-            if [ -f merged_temp.m3u ]; then
-              mv merged_temp.m3u merged.m3u
-            fi
+            FINAL_COUNT=$((OLD_COUNT + NEW_ADDED))
+            echo "✅ Totale canali: $FINAL_COUNT (mantenuti: $OLD_COUNT, nuovi: $NEW_ADDED, già presenti: $UPDATED)"
             
-            FINAL_COUNT=$(grep -c "^#EXTINF" merged.m3u || echo 0)
-            echo "✅ Totale canali finali: $FINAL_COUNT"
+            # Salva statistiche
+            echo "OLD_COUNT=$OLD_COUNT" >> $GITHUB_ENV
+            echo "NEW_ADDED=$NEW_ADDED" >> $GITHUB_ENV
             
           else
             # A mezzanotte (00:00 UTC) o primo run: usa solo i nuovi canali
@@ -167,14 +249,21 @@ jobs:
             else
               echo "ℹ️ Primo run - Inizializzo con nuovi canali"
             fi
+            
             cp new_channels.m3u merged.m3u
             FINAL_COUNT=$NEW_COUNT
+            echo "OLD_COUNT=0" >> $GITHUB_ENV
+            echo "NEW_ADDED=$NEW_COUNT" >> $GITHUB_ENV
           fi
           
-          echo "📋 Anteprima primi 10 canali:"
-          grep "^#EXTINF" merged.m3u | head -n 5
+          # Verifica finale
+          echo "📋 Verifica finale M3U:"
+          echo "- Canali totali: $FINAL_COUNT"
+          echo "- Dimensione file: $(wc -c < merged.m3u) bytes"
+          echo "- Prime 5 righe:"
+          head -n 5 merged.m3u
           
-          # Salva statistiche per il summary
+          # Salva conteggio finale
           echo "FINAL_COUNT=$FINAL_COUNT" >> $GITHUB_ENV
           echo "NEW_COUNT=$NEW_COUNT" >> $GITHUB_ENV
 
@@ -244,7 +333,9 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "**📏 Statistiche File:**" >> $GITHUB_STEP_SUMMARY
             echo "- 📺 Canali totali: ${FINAL_COUNT:-N/A}" >> $GITHUB_STEP_SUMMARY
-            echo "- 🆕 Nuovi dal Worker: ${NEW_COUNT:-N/A}" >> $GITHUB_STEP_SUMMARY
+            echo "- 🔄 Mantenuti precedenti: ${OLD_COUNT:-0}" >> $GITHUB_STEP_SUMMARY
+            echo "- ➕ Nuovi aggiunti: ${NEW_ADDED:-N/A}" >> $GITHUB_STEP_SUMMARY
+            echo "- 🆕 Dal Worker oggi: ${NEW_COUNT:-N/A}" >> $GITHUB_STEP_SUMMARY
             echo "- 💾 Dimensione: $(du -h merged.m3u | cut -f1)" >> $GITHUB_STEP_SUMMARY
             
             CURRENT_HOUR=$(date -u +%H)
