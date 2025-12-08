@@ -1,15 +1,20 @@
 name: Aggiorna Playlist Gist
-
 on:
   schedule:
     - cron: '0 */2 * * *' # Ogni 2 ore (12 volte al giorno)
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   update-gist:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
     steps:
       - name: Scarica playlist dal Worker con retry
+        id: download
         run: |
           MAX_RETRIES=3
           RETRY_DELAY=30
@@ -18,12 +23,15 @@ jobs:
             echo "🔄 Tentativo $i di $MAX_RETRIES..."
             
             HTTP_CODE=$(curl -s -o playlists.json -w "%{http_code}" \
+              --connect-timeout 30 \
+              --max-time 60 \
               -H "User-Agent: GitHubAction-PlaylistUpdater/1.0" \
               -H "Accept: application/json" \
-              https://sport.alemagno1994alex.workers.dev)
+              https://eventi.alemagno1994alex.workers.dev)
             
             if [ "$HTTP_CODE" = "200" ]; then
               echo "✅ Download completato con successo"
+              echo "success=true" >> $GITHUB_OUTPUT
               break
             elif [ "$HTTP_CODE" = "429" ]; then
               echo "⚠️ Rate limit raggiunto (429)"
@@ -33,10 +41,12 @@ jobs:
                 RETRY_DELAY=$((RETRY_DELAY * 2)) # Backoff esponenziale
               else
                 echo "❌ Tutti i tentativi falliti"
+                echo "success=false" >> $GITHUB_OUTPUT
                 exit 1
               fi
             else
               echo "❌ Errore HTTP: $HTTP_CODE"
+              echo "success=false" >> $GITHUB_OUTPUT
               exit 1
             fi
           done
@@ -47,16 +57,130 @@ jobs:
             echo "❌ File playlists.json vuoto o non esistente"
             exit 1
           fi
-          echo "📊 Dimensione file: $(wc -c < playlists.json) bytes"
+          
+          # Verifica che sia JSON valido
+          if ! jq empty playlists.json 2>/dev/null; then
+            echo "❌ File JSON non valido"
+            exit 1
+          fi
+          
+          FILE_SIZE=$(wc -c < playlists.json)
+          echo "📊 Dimensione file: $FILE_SIZE bytes"
+          
+          # Verifica dimensione minima ragionevole (es. 100 bytes)
+          if [ $FILE_SIZE -lt 100 ]; then
+            echo "⚠️ File sospettosamente piccolo"
+            exit 1
+          fi
 
-      - name: Processa e crea M3U
+      - name: Scarica M3U esistente dal Gist
+        id: download_existing
+        continue-on-error: true
         run: |
-          cat playlists.json | jq -r '.[].text' > merged.m3u
-          echo "📝 Righe M3U generate: $(wc -l < merged.m3u)"
+          echo "📥 Tentativo di scaricare M3U esistente dal Gist..."
+          
+          GIST_URL="https://gist.githubusercontent.com/${{ github.repository_owner }}/${{ secrets.GIST_ID }}/raw/merged.m3u"
+          
+          if curl -s -f -o existing.m3u "$GIST_URL"; then
+            echo "✅ M3U esistente scaricato"
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "📊 Righe esistenti: $(wc -l < existing.m3u)"
+          else
+            echo "ℹ️ Nessun M3U esistente (primo run o Gist vuoto)"
+            echo "exists=false" >> $GITHUB_OUTPUT
+            touch existing.m3u
+          fi
+
+      - name: Processa e aggiorna M3U (mantieni fino a mezzanotte)
+        run: |
+          # Estrai i nuovi canali dal JSON
+          jq -r '.[].text' playlists.json > new_channels.m3u
+          
+          NEW_COUNT=$(wc -l < new_channels.m3u)
+          echo "📝 Nuovi canali dal Worker: $NEW_COUNT"
+          
+          if [ $NEW_COUNT -eq 0 ]; then
+            echo "❌ Nessun canale nel JSON"
+            exit 1
+          fi
+          
+          # Orario corrente (UTC)
+          CURRENT_HOUR=$(date -u +%H)
+          echo "🕐 Ora corrente UTC: ${CURRENT_HOUR}:00"
+          
+          # Se esiste un M3U precedente e non è ancora mezzanotte
+          if [ -f existing.m3u ] && [ -s existing.m3u ] && [ "$CURRENT_HOUR" != "00" ]; then
+            echo "🔄 Merge con canali esistenti (mantieni fino a mezzanotte)..."
+            
+            # Crea una mappa dei canali per evitare duplicati
+            # Estrai gli ID/nomi dei canali (linea #EXTINF)
+            declare -A channel_map
+            
+            # Aggiungi prima i canali esistenti
+            while IFS= read -r line; do
+              if [[ $line == "#EXTINF"* ]]; then
+                # Estrai l'identificatore del canale (es. nome dopo la virgola)
+                channel_id=$(echo "$line" | sed 's/.*,//')
+                if [ ! -z "$channel_id" ] && [ -z "${channel_map[$channel_id]}" ]; then
+                  channel_map[$channel_id]=1
+                  echo "$line" >> merged.m3u
+                  # Leggi la linea URL successiva
+                  read -r url_line
+                  echo "$url_line" >> merged.m3u
+                fi
+              fi
+            done < existing.m3u
+            
+            OLD_COUNT=${#channel_map[@]}
+            echo "📺 Canali mantenuti dal precedente: $OLD_COUNT"
+            
+            # Aggiungi/aggiorna con i nuovi canali
+            while IFS= read -r line; do
+              if [[ $line == "#EXTINF"* ]]; then
+                channel_id=$(echo "$line" | sed 's/.*,//')
+                if [ ! -z "$channel_id" ]; then
+                  if [ -z "${channel_map[$channel_id]}" ]; then
+                    echo "➕ Nuovo canale: $channel_id"
+                  else
+                    echo "🔄 Aggiornamento canale: $channel_id"
+                  fi
+                  channel_map[$channel_id]=1
+                fi
+                echo "$line" >> merged_temp.m3u
+                read -r url_line
+                echo "$url_line" >> merged_temp.m3u
+              fi
+            done < new_channels.m3u
+            
+            # Se ci sono nuovi canali, sovrascrivi merged.m3u
+            if [ -f merged_temp.m3u ]; then
+              mv merged_temp.m3u merged.m3u
+            fi
+            
+            FINAL_COUNT=$(grep -c "^#EXTINF" merged.m3u || echo 0)
+            echo "✅ Totale canali finali: $FINAL_COUNT"
+            
+          else
+            # A mezzanotte (00:00 UTC) o primo run: usa solo i nuovi canali
+            if [ "$CURRENT_HOUR" == "00" ]; then
+              echo "🌙 Mezzanotte UTC - Reset completo con nuovi canali"
+            else
+              echo "ℹ️ Primo run - Inizializzo con nuovi canali"
+            fi
+            cp new_channels.m3u merged.m3u
+            FINAL_COUNT=$NEW_COUNT
+          fi
+          
+          echo "📋 Anteprima primi 10 canali:"
+          grep "^#EXTINF" merged.m3u | head -n 5
+          
+          # Salva statistiche per il summary
+          echo "FINAL_COUNT=$FINAL_COUNT" >> $GITHUB_ENV
+          echo "NEW_COUNT=$NEW_COUNT" >> $GITHUB_ENV
 
       - name: Ripristina hash precedente dalla cache
         id: cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: last_hash.txt
           key: playlist-hash-${{ github.run_id }}
@@ -66,8 +190,8 @@ jobs:
       - name: Calcola hash e verifica cambiamenti
         id: check
         run: |
-          NEW_HASH=$(md5sum merged.m3u | awk '{print $1}')
-          echo "🔢 Nuovo hash: $NEW_HASH"
+          NEW_HASH=$(sha256sum merged.m3u | awk '{print $1}')
+          echo "🔢 Nuovo hash (SHA-256): $NEW_HASH"
           
           if [ -f last_hash.txt ]; then
             OLD_HASH=$(cat last_hash.txt)
@@ -85,6 +209,8 @@ jobs:
             echo "changed=false" >> $GITHUB_OUTPUT
             echo "ℹ️ Nessun cambiamento - Skip aggiornamento"
           fi
+          
+          echo "new_hash=$NEW_HASH" >> $GITHUB_OUTPUT
 
       - name: Aggiorna Gist
         if: steps.check.outputs.changed == 'true'
@@ -95,10 +221,36 @@ jobs:
           file_path: merged.m3u
           file_type: text
 
+      - name: Notifica su fallimento (opzionale)
+        if: failure()
+        run: |
+          echo "::error::❌ Workflow fallito - controllare i log"
+          # Qui puoi aggiungere notifiche (Slack, Discord, email, etc.)
+
       - name: Riepilogo finale
         if: always()
         run: |
           echo "### 📊 Riepilogo Esecuzione" >> $GITHUB_STEP_SUMMARY
-          echo "- **Hash playlist**: $(md5sum merged.m3u | awk '{print $1}')" >> $GITHUB_STEP_SUMMARY
-          echo "- **Cambiamenti rilevati**: ${{ steps.check.outputs.changed }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Timestamp**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Parametro | Valore |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Hash playlist** | \`${{ steps.check.outputs.new_hash }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Cambiamenti** | ${{ steps.check.outputs.changed == 'true' && '✅ Sì' || '⏭️ No' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Ora esecuzione (UTC)** | $(date -u '+%Y-%m-%d %H:%M:%S') |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Prossimo reset** | $(date -u -d 'tomorrow 00:00' '+%Y-%m-%d 00:00 UTC') |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Stato** | ${{ job.status == 'success' && '✅ Successo' || '❌ Fallito' }} |" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -f merged.m3u ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**📏 Statistiche File:**" >> $GITHUB_STEP_SUMMARY
+            echo "- 📺 Canali totali: ${FINAL_COUNT:-N/A}" >> $GITHUB_STEP_SUMMARY
+            echo "- 🆕 Nuovi dal Worker: ${NEW_COUNT:-N/A}" >> $GITHUB_STEP_SUMMARY
+            echo "- 💾 Dimensione: $(du -h merged.m3u | cut -f1)" >> $GITHUB_STEP_SUMMARY
+            
+            CURRENT_HOUR=$(date -u +%H)
+            if [ "$CURRENT_HOUR" == "00" ]; then
+              echo "- 🌙 **Reset mezzanotte eseguito**" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "- ⏰ Prossimo reset tra $((24 - 10#$CURRENT_HOUR)) ore" >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
