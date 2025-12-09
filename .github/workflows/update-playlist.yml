@@ -1,17 +1,14 @@
 name: Aggiorna Playlist XromTV
 on:
   schedule:
-    # Esecuzioni agli orari italiani con gestione automatica ora legale/solare
-    # Lo script calcola automaticamente l'offset UTC corretto
-    
-    # ORA SOLARE (ottobre-marzo, mesi 1-3 e 10-12): UTC+1
+    # ORA SOLARE (gen-mar, ott-dic): UTC+1
     - cron: '30 11 * 1-3,10-12 *'  # 12:30 italiana
     - cron: '0 14 * 1-3,10-12 *'   # 15:00 italiana  
     - cron: '0 17 * 1-3,10-12 *'   # 18:00 italiana
     - cron: '45 19 * 1-3,10-12 *'  # 20:45 italiana
     - cron: '0 23 * 1-3,10-12 *'   # 00:00 italiana - reset
     
-    # ORA LEGALE (aprile-settembre, mesi 4-9): UTC+2
+    # ORA LEGALE (apr-set): UTC+2
     - cron: '30 10 * 4-9 *'  # 12:30 italiana
     - cron: '0 13 * 4-9 *'   # 15:00 italiana
     - cron: '0 16 * 4-9 *'   # 18:00 italiana
@@ -33,23 +30,30 @@ jobs:
           echo "🔍 ============ DEBUG INFO ============"
           echo "📅 Data/Ora italiana: $(TZ='Europe/Rome' date '+%Y-%m-%d %H:%M:%S %Z')"
           echo "🌍 Data/Ora UTC: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-          echo "📆 Giorno settimana: $(TZ='Europe/Rome' date '+%A')"
-          echo "📅 Mese corrente: $(TZ='Europe/Rome' date '+%B (%m)')"
-          echo "⚙️  Trigger evento: ${{ github.event_name }}"
-          echo "🔢 Run number: ${{ github.run_number }}"
-          echo "🆔 Run ID: ${{ github.run_id }}"
-          
-          if [ -f existing.m3u ]; then
-            EXISTING_CHANNELS=$(grep -c "^#EXTINF" existing.m3u 2>/dev/null || echo 0)
-            EXISTING_SIZE=$(wc -c < existing.m3u 2>/dev/null || echo 0)
-            echo "📺 Canali nella playlist esistente: $EXISTING_CHANNELS"
-            echo "💾 Dimensione playlist esistente: $EXISTING_SIZE bytes"
-          else
-            echo "❌ Nessuna playlist esistente trovata"
-          fi
+          echo "📆 Giorno: $(TZ='Europe/Rome' date '+%A')"
+          echo "📅 Mese: $(TZ='Europe/Rome' date '+%B (%m)')"
+          echo "⚙️  Trigger: ${{ github.event_name }}"
           echo "======================================"
 
-      - name: Scarica playlist da XromTV con retry
+      - name: Scarica M3U esistente dal Gist
+        id: download_existing
+        continue-on-error: true
+        run: |
+          echo "📥 Download M3U esistente dal Gist..."
+          
+          GIST_URL="https://gist.githubusercontent.com/${{ github.repository_owner }}/${{ secrets.GIST_ID }}/raw/eventi.m3u"
+          
+          if curl -s -f -o existing.m3u "$GIST_URL"; then
+            CHANNEL_COUNT=$(grep -c "^#EXTINF" existing.m3u 2>/dev/null || echo 0)
+            echo "✅ M3U esistente scaricato - Canali: $CHANNEL_COUNT"
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "ℹ️ Nessun M3U esistente"
+            echo "exists=false" >> $GITHUB_OUTPUT
+            touch existing.m3u
+          fi
+
+      - name: Scarica playlist da XromTV
         id: download
         run: |
           MAX_RETRIES=3
@@ -62,300 +66,122 @@ jobs:
               --connect-timeout 30 \
               --max-time 60 \
               -H "User-Agent: GitHubAction-PlaylistUpdater/1.0" \
-              -H "Accept: application/x-mpegURL, text/plain, */*" \
               https://xromtv.com/italia/player/eventi2)
             
             if [ "$HTTP_CODE" = "200" ]; then
-              echo "✅ Download completato con successo"
-              echo "success=true" >> $GITHUB_OUTPUT
+              echo "✅ Download completato"
               break
             elif [ "$HTTP_CODE" = "429" ]; then
-              echo "⚠️ Rate limit raggiunto (429)"
               if [ $i -lt $MAX_RETRIES ]; then
-                echo "⏳ Attendo ${RETRY_DELAY} secondi prima di ritentare..."
+                echo "⏳ Attendo ${RETRY_DELAY}s..."
                 sleep $RETRY_DELAY
                 RETRY_DELAY=$((RETRY_DELAY * 2))
               else
-                echo "❌ Tutti i tentativi falliti"
-                echo "success=false" >> $GITHUB_OUTPUT
+                echo "❌ Troppi tentativi"
                 exit 1
               fi
             else
               echo "❌ Errore HTTP: $HTTP_CODE"
-              echo "success=false" >> $GITHUB_OUTPUT
               exit 1
             fi
           done
-
-      - name: Verifica file scaricato
-        run: |
+          
+          # Verifica file
           if [ ! -s new_playlist.m3u ]; then
-            echo "❌ File new_playlist.m3u vuoto o non esistente"
+            echo "❌ File vuoto"
             exit 1
           fi
           
-          FILE_SIZE=$(wc -c < new_playlist.m3u)
-          echo "📊 Dimensione file: $FILE_SIZE bytes"
-          
-          # Verifica dimensione minima ragionevole (es. 50 bytes)
-          if [ $FILE_SIZE -lt 50 ]; then
-            echo "⚠️ File sospettosamente piccolo"
-            exit 1
-          fi
-          
-          # Conta i canali
           NEW_COUNT=$(grep -c "^#EXTINF" new_playlist.m3u 2>/dev/null || echo 0)
           echo "📺 Canali scaricati: $NEW_COUNT"
           
           if [ $NEW_COUNT -eq 0 ]; then
-            echo "❌ Nessun canale trovato nel file M3U"
+            echo "❌ Nessun canale trovato"
             exit 1
           fi
 
-      - name: Scarica M3U esistente dal Gist
-        id: download_existing
-        continue-on-error: true
+      - name: Processa M3U
         run: |
-          echo "📥 Tentativo di scaricare M3U esistente dal Gist..."
-          
-          GIST_URL="https://gist.githubusercontent.com/${{ github.repository_owner }}/${{ secrets.GIST_ID }}/raw/eventi.m3u"
-          
-          if curl -s -f -o existing.m3u "$GIST_URL"; then
-            echo "✅ M3U esistente scaricato"
-            
-            CHANNEL_COUNT=$(grep -c "^#EXTINF" existing.m3u 2>/dev/null || echo 0)
-            echo "📊 Canali esistenti: $CHANNEL_COUNT"
-            echo "exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "ℹ️ Nessun M3U esistente (primo run o Gist vuoto)"
-            echo "exists=false" >> $GITHUB_OUTPUT
-            touch existing.m3u
-          fi
-
-      - name: Processa e aggiorna M3U
-        run: |
-          # Rileva automaticamente fuso orario italiano (gestisce ora legale/solare)
           CURRENT_HOUR=$(TZ='Europe/Rome' date +%H)
           CURRENT_MINUTE=$(TZ='Europe/Rome' date +%M)
-          CURRENT_DATE=$(TZ='Europe/Rome' date '+%Y-%m-%d %H:%M:%S %Z')
           
-          echo "🕐 Ora corrente italiana: ${CURRENT_HOUR}:${CURRENT_MINUTE}"
-          echo "📅 Data completa: ${CURRENT_DATE}"
+          echo "🕐 Ora italiana: ${CURRENT_HOUR}:${CURRENT_MINUTE}"
           
-          # Funzione per estrarre l'identificatore univoco del canale
-          extract_channel_id() {
-            local line="$1"
-            # Usa il nome del canale (dopo l'ultima virgola) come ID
-            echo "$line" | sed -n 's/.*,\s*\(.*\)/\1/p'
-          }
+          # Conta canali esistenti
+          EXISTING_COUNT=0
+          if [ -s existing.m3u ]; then
+            EXISTING_COUNT=$(grep -c "^#EXTINF" existing.m3u 2>/dev/null || echo 0)
+          fi
           
-          # Funzione per estrarre l'intero blocco canale (EXTINF + KODIPROP + URL)
-          extract_channel_block() {
-            local start_line=$1
-            local file=$2
-            local output_file=$3
-            
-            tail -n +$start_line "$file" | awk '
-              BEGIN { in_block=1 }
-              /^#EXTINF/ { 
-                if (NR > 1) exit
-                print
-                next
-              }
-              /^#EXT-X-PLAYLIST-TYPE/ { print; next }
-              /^#KODIPROP/ { print; next }
-              /^https?:/ { 
-                print
-                in_block=0
-                exit
-              }
-              in_block { print }
-            ' >> "$output_file"
-          }
+          NEW_COUNT=$(grep -c "^#EXTINF" new_playlist.m3u 2>/dev/null || echo 0)
           
-          # A MEZZANOTTE (00:00): Reset completo - SVUOTA la playlist
+          # RESET A MEZZANOTTE
           if [ "$CURRENT_HOUR" == "00" ] && [ "$CURRENT_MINUTE" -lt "30" ]; then
-            echo "🌙 MEZZANOTTE - Reset completo: ELIMINO tutti i canali"
-            
-            # Crea playlist vuota con solo header
+            echo "🌙 RESET MEZZANOTTE - Svuoto playlist"
             echo "#EXTM3U" > merged.m3u
-            
-            echo "✅ Playlist svuotata - I nuovi canali verranno inseriti alle 12:30"
             
             echo "OLD_COUNT=0" >> $GITHUB_ENV
             echo "NEW_ADDED=0" >> $GITHUB_ENV
-            echo "UPDATED=0" >> $GITHUB_ENV
             echo "FINAL_COUNT=0" >> $GITHUB_ENV
             echo "RESET=true" >> $GITHUB_ENV
             
-          # PRIMO INSERIMENTO ALLE 12:30 dopo il reset di mezzanotte
-          elif [ "$CURRENT_HOUR" == "12" ]; then
-            echo "🌅 ORE 12:30 - Primo caricamento giornaliero da XromTV"
+          # PRIMO CARICAMENTO ALLE 12:30 (se vuota)
+          elif [ "$CURRENT_HOUR" == "12" ] && [ $EXISTING_COUNT -eq 0 ]; then
+            echo "🌅 PRIMO CARICAMENTO alle 12:30"
+            cp new_playlist.m3u merged.m3u
             
-            # Verifica se la playlist esistente è vuota o ha solo l'header
-            EXISTING_COUNT=0
-            if [ -s existing.m3u ]; then
-              EXISTING_COUNT=$(grep -c "^#EXTINF" existing.m3u 2>/dev/null || echo 0)
-            fi
+            echo "OLD_COUNT=0" >> $GITHUB_ENV
+            echo "NEW_ADDED=$NEW_COUNT" >> $GITHUB_ENV
+            echo "FINAL_COUNT=$NEW_COUNT" >> $GITHUB_ENV
+            echo "FIRST_LOAD=true" >> $GITHUB_ENV
             
-            if [ $EXISTING_COUNT -eq 0 ]; then
-              echo "📝 Playlist vuota rilevata - Eseguo primo caricamento"
-              cp new_playlist.m3u merged.m3u
-              
-              FINAL_COUNT=$(grep -c "^#EXTINF" merged.m3u 2>/dev/null || echo 0)
-              echo "✅ Caricati $FINAL_COUNT nuovi canali per oggi"
-              
-              echo "OLD_COUNT=0" >> $GITHUB_ENV
-              echo "NEW_ADDED=$FINAL_COUNT" >> $GITHUB_ENV
-              echo "UPDATED=0" >> $GITHUB_ENV
-              echo "FINAL_COUNT=$FINAL_COUNT" >> $GITHUB_ENV
-              echo "RESET=false" >> $GITHUB_ENV
-              echo "FIRST_LOAD=true" >> $GITHUB_ENV
-            else
-              echo "⚠️ Playlist non vuota alle 12:30 - Eseguo aggiornamento normale"
-              # Continua con logica di aggiornamento (vedi sotto)
-              FORCE_UPDATE=true
-            fi
+          # AGGIORNAMENTO NORMALE
+          else
+            echo "🔄 AGGIORNAMENTO - Merge canali"
             
+            # Copia semplicemente il nuovo file (contiene già tutto aggiornato)
+            cp new_playlist.m3u merged.m3u
+            
+            echo "OLD_COUNT=$EXISTING_COUNT" >> $GITHUB_ENV
+            echo "NEW_ADDED=$NEW_COUNT" >> $GITHUB_ENV
+            echo "FINAL_COUNT=$NEW_COUNT" >> $GITHUB_ENV
+            echo "UPDATE=true" >> $GITHUB_ENV
           fi
-          
-          # AGGIORNAMENTO NORMALE (12:30 se non vuota, 15:00, 18:00, 20:45)
-          if [ "$CURRENT_HOUR" != "00" ] && [ "${FIRST_LOAD}" != "true" ]; then
-            echo "🔄 Aggiornamento playlist (merge con canali esistenti)"
-            
-            # Inizia con l'header
-            echo "#EXTM3U" > merged.m3u
-            
-            # Array associativo per tracciare canali
-            declare -A channel_map
-            declare -A channel_line_map
-            
-            # FASE 1: Carica canali esistenti
-            echo "📺 Fase 1: Carico canali esistenti..."
-            OLD_COUNT=0
-            
-            if [ -s existing.m3u ]; then
-              line_num=0
-              while IFS= read -r line; do
-                line_num=$((line_num + 1))
-                
-                if [[ $line == "#EXTINF"* ]]; then
-                  channel_id=$(extract_channel_id "$line")
-                  
-                  if [ ! -z "$channel_id" ]; then
-                    channel_map[$channel_id]="existing"
-                    channel_line_map[$channel_id]=$line_num
-                    OLD_COUNT=$((OLD_COUNT + 1))
-                  fi
-                fi
-              done < existing.m3u
-              
-              echo "✅ Trovati $OLD_COUNT canali esistenti"
-            fi
-            
-            # FASE 2: Processa nuovi canali e aggiorna/aggiungi
-            echo "🆕 Fase 2: Processo nuovi canali da XromTV..."
-            NEW_ADDED=0
-            UPDATED=0
-            
-            line_num=0
-            while IFS= read -r line; do
-              line_num=$((line_num + 1))
-              
-              if [[ $line == "#EXTINF"* ]]; then
-                channel_id=$(extract_channel_id "$line")
-                
-                if [ ! -z "$channel_id" ]; then
-                  if [ -z "${channel_map[$channel_id]}" ]; then
-                    # Nuovo canale
-                    echo "➕ Nuovo canale: $channel_id"
-                    channel_map[$channel_id]="new"
-                    NEW_ADDED=$((NEW_ADDED + 1))
-                  else
-                    # Canale esistente - aggiorna URL
-                    echo "🔄 Aggiorno URL per: $channel_id"
-                    UPDATED=$((UPDATED + 1))
-                  fi
-                  
-                  # Aggiungi separatore
-                  echo "" >> merged.m3u
-                  
-                  # Estrai e scrivi il blocco completo del canale
-                  tail -n +$line_num new_playlist.m3u | awk '
-                    BEGIN { in_block=1; first_extinf=1 }
-                    /^#EXTINF/ { 
-                      if (!first_extinf) exit
-                      first_extinf=0
-                      print
-                      next
-                    }
-                    /^#EXT-X-PLAYLIST-TYPE/ { print; next }
-                    /^#KODIPROP/ { print; next }
-                    /^https?:/ { 
-                      print
-                      print ""
-                      exit
-                    }
-                    /^$/ { next }
-                    in_block { print }
-                  ' >> merged.m3u
-                fi
-              fi
-            done < new_playlist.m3u
-            
-            FINAL_COUNT=$((NEW_ADDED + UPDATED))
-            echo "✅ Totale canali: $FINAL_COUNT (nuovi: $NEW_ADDED, aggiornati: $UPDATED)"
-            
-            echo "OLD_COUNT=$OLD_COUNT" >> $GITHUB_ENV
-            echo "NEW_ADDED=$NEW_ADDED" >> $GITHUB_ENV
-            echo "UPDATED=$UPDATED" >> $GITHUB_ENV
-            echo "FINAL_COUNT=$FINAL_COUNT" >> $GITHUB_ENV
-            echo "RESET=false" >> $GITHUB_ENV
-          fi
-          
-          # Pulizia finale
-          sed -i '/^$/N;/^\n$/d' merged.m3u  # Rimuovi righe vuote doppie
           
           # Verifica finale
-          echo "📋 Verifica finale M3U:"
-          echo "- Canali totali: $FINAL_COUNT"
-          echo "- Dimensione file: $(wc -c < merged.m3u) bytes"
-          echo "- Prime 10 righe:"
-          head -n 10 merged.m3u
+          FINAL=$(grep -c "^#EXTINF" merged.m3u 2>/dev/null || echo 0)
+          echo ""
+          echo "📊 RISULTATO:"
+          echo "- Canali finali: $FINAL"
+          echo "- Dimensione: $(wc -c < merged.m3u) bytes"
 
-      - name: Ripristina hash precedente dalla cache
-        id: cache
-        uses: actions/cache@v4
-        with:
-          path: last_hash.txt
-          key: playlist-hash-${{ github.run_id }}
-          restore-keys: |
-            playlist-hash-
-
-      - name: Calcola hash e verifica cambiamenti
+      - name: Calcola hash
         id: check
         run: |
           NEW_HASH=$(sha256sum merged.m3u | awk '{print $1}')
-          echo "🔢 Nuovo hash (SHA-256): $NEW_HASH"
+          echo "🔢 Hash: $NEW_HASH"
           
+          # Ripristina hash precedente
+          OLD_HASH="none"
           if [ -f last_hash.txt ]; then
             OLD_HASH=$(cat last_hash.txt)
-            echo "🔢 Vecchio hash: $OLD_HASH"
-          else
-            OLD_HASH="none"
-            echo "ℹ️ Primo run - nessun hash precedente"
           fi
           
           if [ "$NEW_HASH" != "$OLD_HASH" ]; then
             echo "changed=true" >> $GITHUB_OUTPUT
-            echo "✅ Rilevati cambiamenti - Aggiornamento Gist..."
+            echo "✅ Rilevati cambiamenti"
             echo "$NEW_HASH" > last_hash.txt
           else
             echo "changed=false" >> $GITHUB_OUTPUT
-            echo "ℹ️ Nessun cambiamento - Skip aggiornamento"
+            echo "ℹ️ Nessun cambiamento"
           fi
-          
-          echo "new_hash=$NEW_HASH" >> $GITHUB_OUTPUT
+
+      - name: Cache hash
+        uses: actions/cache@v4
+        with:
+          path: last_hash.txt
+          key: playlist-hash-${{ github.run_id }}
+          restore-keys: playlist-hash-
 
       - name: Aggiorna Gist
         if: steps.check.outputs.changed == 'true'
@@ -366,49 +192,33 @@ jobs:
           file_path: merged.m3u
           file_type: text
 
-      - name: Notifica su fallimento
-        if: failure()
-        run: |
-          echo "::error::❌ Workflow fallito - controllare i log"
-
-      - name: Riepilogo finale
+      - name: Riepilogo
         if: always()
         run: |
           echo "### 📊 Riepilogo Esecuzione" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Parametro | Valore |" >> $GITHUB_STEP_SUMMARY
           echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| **Hash playlist** | \`${{ steps.check.outputs.new_hash }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Ora (Italia)** | $(TZ='Europe/Rome' date '+%Y-%m-%d %H:%M:%S') |" >> $GITHUB_STEP_SUMMARY
           echo "| **Cambiamenti** | ${{ steps.check.outputs.changed == 'true' && '✅ Sì' || '⏭️ No' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Ora esecuzione (Italia)** | $(TZ='Europe/Rome' date '+%Y-%m-%d %H:%M:%S') |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Stato** | ${{ job.status == 'success' && '✅ Successo' || '❌ Fallito' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Stato** | ${{ job.status == 'success' && '✅ OK' || '❌ Errore' }} |" >> $GITHUB_STEP_SUMMARY
           
           if [ -f merged.m3u ]; then
+            FINAL=$(grep -c "^#EXTINF" merged.m3u 2>/dev/null || echo 0)
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "**📏 Statistiche Aggiornamento:**" >> $GITHUB_STEP_SUMMARY
+            echo "**Canali totali: $FINAL**" >> $GITHUB_STEP_SUMMARY
             
             if [ "${RESET}" == "true" ]; then
-              echo "- 🌙 **RESET MEZZANOTTE ESEGUITO** - Playlist svuotata" >> $GITHUB_STEP_SUMMARY
-              echo "- ⏰ Prossimo caricamento: **domani alle 12:30**" >> $GITHUB_STEP_SUMMARY
+              echo "- 🌙 Reset mezzanotte eseguito" >> $GITHUB_STEP_SUMMARY
             elif [ "${FIRST_LOAD}" == "true" ]; then
-              echo "- 🌅 **PRIMO CARICAMENTO GIORNALIERO (12:30)**" >> $GITHUB_STEP_SUMMARY
-              echo "- 📺 Canali caricati: ${FINAL_COUNT}" >> $GITHUB_STEP_SUMMARY
+              echo "- 🌅 Primo caricamento 12:30" >> $GITHUB_STEP_SUMMARY
             else
-              echo "- 📺 Canali totali: ${FINAL_COUNT}" >> $GITHUB_STEP_SUMMARY
-              echo "- 🔄 Canali precedenti: ${OLD_COUNT}" >> $GITHUB_STEP_SUMMARY
-              echo "- ➕ Nuovi aggiunti: ${NEW_ADDED}" >> $GITHUB_STEP_SUMMARY
-              echo "- 🔄 URL aggiornati: ${UPDATED}" >> $GITHUB_STEP_SUMMARY
+              echo "- 🔄 Aggiornamento completato" >> $GITHUB_STEP_SUMMARY
             fi
-            
-            echo "- 💾 Dimensione: $(du -h merged.m3u | cut -f1)" >> $GITHUB_STEP_SUMMARY
-            
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "**⏰ Prossimi aggiornamenti (ora italiana - gestione automatica ora legale/solare):**" >> $GITHUB_STEP_SUMMARY
-            echo "- 🕧 12:30 - Primo caricamento dopo reset" >> $GITHUB_STEP_SUMMARY
-            echo "- 🕒 15:00 - Aggiornamento" >> $GITHUB_STEP_SUMMARY
-            echo "- 🕕 18:00 - Aggiornamento" >> $GITHUB_STEP_SUMMARY
-            echo "- 🕘 20:45 - Aggiornamento" >> $GITHUB_STEP_SUMMARY
-            echo "- 🌙 00:00 - Reset completo (svuota playlist)" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "ℹ️ *Gli orari si adattano automaticamente all'ora legale/solare italiana*" >> $GITHUB_STEP_SUMMARY
           fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**⏰ Orari (ora italiana):**" >> $GITHUB_STEP_SUMMARY
+          echo "- 12:30 - Primo caricamento" >> $GITHUB_STEP_SUMMARY
+          echo "- 15:00, 18:00, 20:45 - Aggiornamenti" >> $GITHUB_STEP_SUMMARY
+          echo "- 00:00 - Reset completo" >> $GITHUB_STEP_SUMMARY
