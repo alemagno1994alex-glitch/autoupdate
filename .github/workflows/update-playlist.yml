@@ -1,19 +1,22 @@
 name: Aggiorna Playlist XromTV
 on:
   schedule:
-    # Esecuzioni agli orari italiani
-    # Durante ora solare (ottobre-marzo): UTC+1
-    - cron: '30 11 * * *'  # 12:30 ora italiana
-    - cron: '0 14 * * *'   # 15:00 ora italiana
-    - cron: '0 17 * * *'   # 18:00 ora italiana
-    - cron: '45 19 * * *'  # 20:45 ora italiana
-    - cron: '0 23 * * *'   # 00:00 ora italiana - reset
-    # Durante ora legale (aprile-settembre): UTC+2
-    - cron: '30 10 * 4-9 *'  # 12:30 ora italiana (estate)
-    - cron: '0 13 * 4-9 *'   # 15:00 ora italiana (estate)
-    - cron: '0 16 * 4-9 *'   # 18:00 ora italiana (estate)
-    - cron: '45 18 * 4-9 *'  # 20:45 ora italiana (estate)
-    - cron: '0 22 * 4-9 *'   # 00:00 ora italiana (estate) - reset
+    # Esecuzioni agli orari italiani con gestione automatica ora legale/solare
+    # Lo script calcola automaticamente l'offset UTC corretto
+    
+    # ORA SOLARE (ottobre-marzo, mesi 1-3 e 10-12): UTC+1
+    - cron: '30 11 * 1-3,10-12 *'  # 12:30 italiana
+    - cron: '0 14 * 1-3,10-12 *'   # 15:00 italiana  
+    - cron: '0 17 * 1-3,10-12 *'   # 18:00 italiana
+    - cron: '45 19 * 1-3,10-12 *'  # 20:45 italiana
+    - cron: '0 23 * 1-3,10-12 *'   # 00:00 italiana - reset
+    
+    # ORA LEGALE (aprile-settembre, mesi 4-9): UTC+2
+    - cron: '30 10 * 4-9 *'  # 12:30 italiana
+    - cron: '0 13 * 4-9 *'   # 15:00 italiana
+    - cron: '0 16 * 4-9 *'   # 18:00 italiana
+    - cron: '45 18 * 4-9 *'  # 20:45 italiana
+    - cron: '0 22 * 4-9 *'   # 00:00 italiana - reset
   workflow_dispatch:
 
 permissions:
@@ -27,19 +30,24 @@ jobs:
     steps:
       - name: Debug - Mostra info esecuzione
         run: |
-          echo "🔍 DEBUG INFO:"
-          echo "- Ora italiana: $(TZ='Europe/Rome' date '+%H:%M')"
-          echo "- Ora UTC: $(date -u '+%H:%M')"
-          echo "- Giorno settimana: $(date '+%A')"
-          echo "- Mese: $(date '+%B (%m)')"
-          echo "- Trigger: ${{ github.event_name }}"
+          echo "🔍 ============ DEBUG INFO ============"
+          echo "📅 Data/Ora italiana: $(TZ='Europe/Rome' date '+%Y-%m-%d %H:%M:%S %Z')"
+          echo "🌍 Data/Ora UTC: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "📆 Giorno settimana: $(TZ='Europe/Rome' date '+%A')"
+          echo "📅 Mese corrente: $(TZ='Europe/Rome' date '+%B (%m)')"
+          echo "⚙️  Trigger evento: ${{ github.event_name }}"
+          echo "🔢 Run number: ${{ github.run_number }}"
+          echo "🆔 Run ID: ${{ github.run_id }}"
           
           if [ -f existing.m3u ]; then
             EXISTING_CHANNELS=$(grep -c "^#EXTINF" existing.m3u 2>/dev/null || echo 0)
-            echo "- Canali nella playlist esistente: $EXISTING_CHANNELS"
+            EXISTING_SIZE=$(wc -c < existing.m3u 2>/dev/null || echo 0)
+            echo "📺 Canali nella playlist esistente: $EXISTING_CHANNELS"
+            echo "💾 Dimensione playlist esistente: $EXISTING_SIZE bytes"
           else
-            echo "- Nessuna playlist esistente trovata"
+            echo "❌ Nessuna playlist esistente trovata"
           fi
+          echo "======================================"
 
       - name: Scarica playlist da XromTV con retry
         id: download
