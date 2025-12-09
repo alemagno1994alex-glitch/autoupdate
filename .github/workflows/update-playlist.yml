@@ -25,6 +25,22 @@ jobs:
     timeout-minutes: 10
     
     steps:
+      - name: Debug - Mostra info esecuzione
+        run: |
+          echo "🔍 DEBUG INFO:"
+          echo "- Ora italiana: $(TZ='Europe/Rome' date '+%H:%M')"
+          echo "- Ora UTC: $(date -u '+%H:%M')"
+          echo "- Giorno settimana: $(date '+%A')"
+          echo "- Mese: $(date '+%B (%m)')"
+          echo "- Trigger: ${{ github.event_name }}"
+          
+          if [ -f existing.m3u ]; then
+            EXISTING_CHANNELS=$(grep -c "^#EXTINF" existing.m3u 2>/dev/null || echo 0)
+            echo "- Canali nella playlist esistente: $EXISTING_CHANNELS"
+          else
+            echo "- Nessuna playlist esistente trovata"
+          fi
+
       - name: Scarica playlist da XromTV con retry
         id: download
         run: |
@@ -39,7 +55,7 @@ jobs:
               --max-time 60 \
               -H "User-Agent: GitHubAction-PlaylistUpdater/1.0" \
               -H "Accept: application/x-mpegURL, text/plain, */*" \
-              https://xromtv.com/italia/player/eventi)
+              https://xromtv.com/italia/player/eventi2)
             
             if [ "$HTTP_CODE" = "200" ]; then
               echo "✅ Download completato con successo"
@@ -150,7 +166,7 @@ jobs:
           }
           
           # A MEZZANOTTE (00:00): Reset completo - SVUOTA la playlist
-          if [ "$CURRENT_HOUR" == "00" ] && [ "$CURRENT_MINUTE" -lt "10" ]; then
+          if [ "$CURRENT_HOUR" == "00" ] && [ "$CURRENT_MINUTE" -lt "30" ]; then
             echo "🌙 MEZZANOTTE - Reset completo: ELIMINO tutti i canali"
             
             # Crea playlist vuota con solo header
@@ -165,24 +181,39 @@ jobs:
             echo "RESET=true" >> $GITHUB_ENV
             
           # PRIMO INSERIMENTO ALLE 12:30 dopo il reset di mezzanotte
-          elif [ "$CURRENT_HOUR" == "12" ] && [ "$CURRENT_MINUTE" -ge "25" ] && [ "$CURRENT_MINUTE" -le "35" ]; then
+          elif [ "$CURRENT_HOUR" == "12" ]; then
             echo "🌅 ORE 12:30 - Primo caricamento giornaliero da XromTV"
             
-            cp new_playlist.m3u merged.m3u
+            # Verifica se la playlist esistente è vuota o ha solo l'header
+            EXISTING_COUNT=0
+            if [ -s existing.m3u ]; then
+              EXISTING_COUNT=$(grep -c "^#EXTINF" existing.m3u 2>/dev/null || echo 0)
+            fi
             
-            FINAL_COUNT=$(grep -c "^#EXTINF" merged.m3u 2>/dev/null || echo 0)
-            echo "✅ Caricati $FINAL_COUNT nuovi canali per oggi"
+            if [ $EXISTING_COUNT -eq 0 ]; then
+              echo "📝 Playlist vuota rilevata - Eseguo primo caricamento"
+              cp new_playlist.m3u merged.m3u
+              
+              FINAL_COUNT=$(grep -c "^#EXTINF" merged.m3u 2>/dev/null || echo 0)
+              echo "✅ Caricati $FINAL_COUNT nuovi canali per oggi"
+              
+              echo "OLD_COUNT=0" >> $GITHUB_ENV
+              echo "NEW_ADDED=$FINAL_COUNT" >> $GITHUB_ENV
+              echo "UPDATED=0" >> $GITHUB_ENV
+              echo "FINAL_COUNT=$FINAL_COUNT" >> $GITHUB_ENV
+              echo "RESET=false" >> $GITHUB_ENV
+              echo "FIRST_LOAD=true" >> $GITHUB_ENV
+            else
+              echo "⚠️ Playlist non vuota alle 12:30 - Eseguo aggiornamento normale"
+              # Continua con logica di aggiornamento (vedi sotto)
+              FORCE_UPDATE=true
+            fi
             
-            echo "OLD_COUNT=0" >> $GITHUB_ENV
-            echo "NEW_ADDED=$FINAL_COUNT" >> $GITHUB_ENV
-            echo "UPDATED=0" >> $GITHUB_ENV
-            echo "FINAL_COUNT=$FINAL_COUNT" >> $GITHUB_ENV
-            echo "RESET=false" >> $GITHUB_ENV
-            echo "FIRST_LOAD=true" >> $GITHUB_ENV
-            
-          else
-            # AGGIORNAMENTO NORMALE (15:00, 18:00, 20:45)
-            echo "🔄 Aggiornamento playlist agli orari programmati (15:00, 18:00, 20:45)"
+          fi
+          
+          # AGGIORNAMENTO NORMALE (12:30 se non vuota, 15:00, 18:00, 20:45)
+          if [ "$CURRENT_HOUR" != "00" ] && [ "${FIRST_LOAD}" != "true" ]; then
+            echo "🔄 Aggiornamento playlist (merge con canali esistenti)"
             
             # Inizia con l'header
             echo "#EXTM3U" > merged.m3u
