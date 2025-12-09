@@ -39,7 +39,7 @@ jobs:
               --max-time 60 \
               -H "User-Agent: GitHubAction-PlaylistUpdater/1.0" \
               -H "Accept: application/x-mpegURL, text/plain, */*" \
-              https://xromtv.com/italia/player/eventi2)
+              https://xromtv.com/italia/player/eventi)
             
             if [ "$HTTP_CODE" = "200" ]; then
               echo "✅ Download completato con successo"
