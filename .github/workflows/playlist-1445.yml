@@ -21,7 +21,7 @@ jobs:
 
       - name: Scarica playlist da XromTV
         run: |
-          curl -s -o new_playlist.m3u \
+          curl -s -o merged.m3u \
             -H "User-Agent: GitHubAction-PlaylistUpdater/1.0" \
             https://xromtv.com/italia/player/eventi3
           [ -s new_playlist.m3u ] || { echo "❌ Playlist vuota"; exit 1; }
