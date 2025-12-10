@@ -26,7 +26,7 @@ jobs:
           echo "======================================"
 
       - name: Crea M3U vuoto
-        run: echo "#EXTM3U" > reset.m3u
+        run: echo "#EXTM3U" > merged.m3u
 
       - name: Aggiorna Gist
         uses: exuanbo/actions-deploy-gist@v1
