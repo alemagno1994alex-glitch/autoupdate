@@ -116,7 +116,7 @@ jobs:
           NEW_COUNT=$(grep -c "^#EXTINF" new_playlist.m3u 2>/dev/null || echo 0)
           
           # RESET A MEZZANOTTE
-          if [ "$CURRENT_HOUR" == "00" ] && [ "$CURRENT_MINUTE" -lt "30" ]; then
+          if [ "$CURRENT_HOUR" == "00" ]; then
             echo "🌙 RESET MEZZANOTTE - Svuoto playlist"
             echo "#EXTM3U" > merged.m3u
             
