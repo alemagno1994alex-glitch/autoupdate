@@ -24,7 +24,7 @@ jobs:
         run: |
           curl -s -o new_playlist.m3u \
             -H "User-Agent: GitHubAction-PlaylistUpdater/1.0" \
-            https://xromtv.com/italia/player/eventi
+            https://xromtv.com/italia/player/eventi3
           [ -s new_playlist.m3u ] || { echo "❌ Playlist vuota"; exit 1; }
 
       - name: Calcola hash
