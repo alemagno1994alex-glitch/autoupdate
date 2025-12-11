@@ -29,13 +29,21 @@ jobs:
         id: verify_time
         run: |
           CURRENT_HOUR=$(TZ='Europe/Rome' date +%H)
+          TRIGGER="${{ github.event_name }}"
           
-          if [ "$CURRENT_HOUR" == "00" ] || [ "$CURRENT_HOUR" == "23" ]; then
-            echo "✅ Orario corretto per reset ($CURRENT_HOUR:xx)"
+          # Permetti sempre reset manuale
+          if [ "$TRIGGER" == "workflow_dispatch" ]; then
+            echo "✅ Reset MANUALE - Sempre permesso"
             echo "proceed=true" >> $GITHUB_OUTPUT
+            echo "manual=true" >> $GITHUB_OUTPUT
+          elif [ "$CURRENT_HOUR" == "00" ] || [ "$CURRENT_HOUR" == "23" ]; then
+            echo "✅ Reset AUTOMATICO - Orario corretto ($CURRENT_HOUR:xx)"
+            echo "proceed=true" >> $GITHUB_OUTPUT
+            echo "manual=false" >> $GITHUB_OUTPUT
           else
-            echo "⚠️ Orario non valido per reset ($CURRENT_HOUR:xx)"
+            echo "⏸️ Reset automatico saltato - Orario non valido ($CURRENT_HOUR:xx)"
             echo "proceed=false" >> $GITHUB_OUTPUT
+            echo "manual=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Crea playlist vuota
@@ -67,13 +75,17 @@ jobs:
           echo "| Parametro | Valore |" >> $GITHUB_STEP_SUMMARY
           echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
           echo "| **Ora (Italia)** | $(TZ='Europe/Rome' date '+%Y-%m-%d %H:%M:%S') |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Trigger** | ${{ github.event_name == 'workflow_dispatch' && '🔧 Manuale' || '⏰ Automatico' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **Operazione** | Reset Playlist |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Eseguito** | ${{ steps.verify_time.outputs.proceed == 'true' && '✅ Sì' || '⏭️ Saltato' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Eseguito** | ${{ steps.verify_time.outputs.proceed == 'true' && '✅ Sì' || '⏸️ Saltato' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **Stato** | ${{ job.status == 'success' && '✅ OK' || '❌ Errore' }} |" >> $GITHUB_STEP_SUMMARY
           
           if [ "${{ steps.verify_time.outputs.proceed }}" == "true" ]; then
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "**Playlist resettata: 0 canali**" >> $GITHUB_STEP_SUMMARY
+            echo "**✅ Playlist resettata: 0 canali**" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "🌅 Prossimo caricamento: 12:30 (ora italiana)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "⏸️ Reset non eseguito - esegui manualmente o attendi le 00:15" >> $GITHUB_STEP_SUMMARY
           fi
