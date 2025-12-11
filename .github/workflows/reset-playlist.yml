@@ -1,0 +1,79 @@
+name: Reset Playlist Mezzanotte
+on:
+  schedule:
+    # ORA SOLARE (gen-mar, ott-dic): UTC+1
+    - cron: '15 23 * 1-3,10-12 *'  # 00:15 italiana
+    
+    # ORA LEGALE (apr-set): UTC+2
+    - cron: '15 22 * 4-9 *'  # 00:15 italiana
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reset-playlist:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    
+    steps:
+      - name: Debug - Info esecuzione
+        run: |
+          echo "🌙 ============ RESET MEZZANOTTE ============"
+          echo "📅 Data/Ora italiana: $(TZ='Europe/Rome' date '+%Y-%m-%d %H:%M:%S %Z')"
+          echo "🌍 Data/Ora UTC: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "⚙️  Trigger: ${{ github.event_name }}"
+          echo "=========================================="
+
+      - name: Verifica orario reset
+        id: verify_time
+        run: |
+          CURRENT_HOUR=$(TZ='Europe/Rome' date +%H)
+          
+          if [ "$CURRENT_HOUR" == "00" ] || [ "$CURRENT_HOUR" == "23" ]; then
+            echo "✅ Orario corretto per reset ($CURRENT_HOUR:xx)"
+            echo "proceed=true" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️ Orario non valido per reset ($CURRENT_HOUR:xx)"
+            echo "proceed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Crea playlist vuota
+        if: steps.verify_time.outputs.proceed == 'true'
+        run: |
+          echo "🌙 Creo playlist vuota per reset mezzanotte..."
+          echo "#EXTM3U" > reset.m3u
+          
+          echo ""
+          echo "📊 RESET COMPLETATO:"
+          echo "- Canali: 0"
+          echo "- Dimensione: $(wc -c < reset.m3u) bytes"
+          echo "- Hash: $(sha256sum reset.m3u | awk '{print $1}')"
+
+      - name: Aggiorna Gist
+        if: steps.verify_time.outputs.proceed == 'true'
+        uses: exuanbo/actions-deploy-gist@v1
+        with:
+          token: ${{ secrets.GIST_TOKEN }}
+          gist_id: ${{ secrets.GIST_ID }}
+          file_path: reset.m3u
+          file_type: text
+
+      - name: Riepilogo Reset
+        if: always()
+        run: |
+          echo "### 🌙 Riepilogo Reset Mezzanotte" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Parametro | Valore |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Ora (Italia)** | $(TZ='Europe/Rome' date '+%Y-%m-%d %H:%M:%S') |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Operazione** | Reset Playlist |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Eseguito** | ${{ steps.verify_time.outputs.proceed == 'true' && '✅ Sì' || '⏭️ Saltato' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Stato** | ${{ job.status == 'success' && '✅ OK' || '❌ Errore' }} |" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ steps.verify_time.outputs.proceed }}" == "true" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Playlist resettata: 0 canali**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "🌅 Prossimo caricamento: 12:30 (ora italiana)" >> $GITHUB_STEP_SUMMARY
+          fi
