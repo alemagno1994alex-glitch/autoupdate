@@ -84,55 +84,95 @@ jobs:
             echo "type=update" >> $GITHUB_OUTPUT
           fi
 
-      - name: Scarica playlist da XromTV
+      - name: Scarica playlist da XromTV (con fallback)
         if: steps.verify_time.outputs.proceed == 'true'
         id: download
         run: |
-          MAX_RETRIES=3
-          RETRY_DELAY=30
+          # Lista URL da provare in ordine
+          URLS=(
+            "https://xromtv.com/italia/player/eventi"
+            "https://xromtv.com/italia/player/eventi1"
+            "https://xromtv.com/italia/player/eventi2"
+            "https://xromtv.com/italia/player/eventi3"
+          )
           
-          for i in $(seq 1 $MAX_RETRIES); do
-            echo "🔄 Tentativo $i di $MAX_RETRIES..."
+          MAX_RETRIES=2
+          RETRY_DELAY=15
+          SUCCESS=false
+          USED_URL=""
+          
+          # Prova ogni URL
+          for URL in "${URLS[@]}"; do
+            echo ""
+            echo "🔗 Provo URL: $URL"
             
-            HTTP_CODE=$(curl -s -o new_playlist.m3u -w "%{http_code}" \
-              --connect-timeout 30 \
-              --max-time 60 \
-              -H "User-Agent: GitHubAction-PlaylistUpdater/1.0" \
-              https://xromtv.com/italia/player/eventi)
-            
-            if [ "$HTTP_CODE" = "200" ]; then
-              echo "✅ Download completato (HTTP $HTTP_CODE)"
-              break
-            elif [ "$HTTP_CODE" = "429" ]; then
-              if [ $i -lt $MAX_RETRIES ]; then
-                echo "⏳ Rate limit - Attendo ${RETRY_DELAY}s..."
-                sleep $RETRY_DELAY
-                RETRY_DELAY=$((RETRY_DELAY * 2))
+            for i in $(seq 1 $MAX_RETRIES); do
+              echo "  🔄 Tentativo $i di $MAX_RETRIES..."
+              
+              HTTP_CODE=$(curl -s -o new_playlist.m3u -w "%{http_code}" \
+                --connect-timeout 30 \
+                --max-time 60 \
+                -H "User-Agent: GitHubAction-PlaylistUpdater/1.0" \
+                "$URL")
+              
+              if [ "$HTTP_CODE" = "200" ] && [ -s new_playlist.m3u ]; then
+                # Verifica che contenga canali
+                NEW_COUNT=$(grep -c "^#EXTINF" new_playlist.m3u 2>/dev/null || echo 0)
+                
+                if [ $NEW_COUNT -gt 0 ]; then
+                  echo "  ✅ Download completato! (HTTP $HTTP_CODE - $NEW_COUNT canali)"
+                  SUCCESS=true
+                  USED_URL="$URL"
+                  break 2  # Esce da entrambi i loop
+                else
+                  echo "  ⚠️ File scaricato ma senza canali"
+                fi
+              elif [ "$HTTP_CODE" = "429" ]; then
+                if [ $i -lt $MAX_RETRIES ]; then
+                  echo "  ⏳ Rate limit - Attendo ${RETRY_DELAY}s..."
+                  sleep $RETRY_DELAY
+                else
+                  echo "  ❌ Rate limit persistente"
+                fi
               else
-                echo "❌ Troppi tentativi falliti"
-                exit 1
+                echo "  ❌ Errore HTTP: $HTTP_CODE"
               fi
-            else
-              echo "❌ Errore HTTP: $HTTP_CODE"
-              exit 1
+              
+              # Pausa tra tentativi
+              if [ $i -lt $MAX_RETRIES ]; then
+                sleep 5
+              fi
+            done
+            
+            if [ "$SUCCESS" = true ]; then
+              break
             fi
+            
+            # Pausa prima di provare il prossimo URL
+            echo "  ⏭️ Passo al prossimo URL..."
+            sleep 5
           done
           
-          # Verifica file scaricato
-          if [ ! -s new_playlist.m3u ]; then
-            echo "❌ File vuoto o non esistente"
+          # Verifica successo finale
+          if [ "$SUCCESS" = false ]; then
+            echo ""
+            echo "❌ ERRORE: Tutti gli URL hanno fallito!"
+            echo "   URLs provati:"
+            for URL in "${URLS[@]}"; do
+              echo "   - $URL"
+            done
             exit 1
           fi
           
+          # Output risultati
           NEW_COUNT=$(grep -c "^#EXTINF" new_playlist.m3u 2>/dev/null || echo 0)
+          echo ""
+          echo "✅ SUCCESSO!"
           echo "📺 Canali nella nuova playlist: $NEW_COUNT"
-          
-          if [ $NEW_COUNT -eq 0 ]; then
-            echo "❌ Nessun canale trovato nella playlist"
-            exit 1
-          fi
+          echo "🔗 URL utilizzato: $USED_URL"
           
           echo "new_count=$NEW_COUNT" >> $GITHUB_OUTPUT
+          echo "used_url=$USED_URL" >> $GITHUB_OUTPUT
 
       - name: Processa e aggiorna playlist
         if: steps.verify_time.outputs.proceed == 'true'
@@ -140,12 +180,14 @@ jobs:
           OPERATION_TYPE="${{ steps.operation.outputs.type }}"
           EXISTING_COUNT="${{ steps.download_existing.outputs.existing_count }}"
           NEW_COUNT="${{ steps.download.outputs.new_count }}"
+          USED_URL="${{ steps.download.outputs.used_url }}"
           
           echo ""
           echo "📊 ELABORAZIONE:"
           echo "- Tipo: $OPERATION_TYPE"
           echo "- Canali esistenti: $EXISTING_COUNT"
           echo "- Canali nuovi: $NEW_COUNT"
+          echo "- URL usato: $USED_URL"
           echo ""
           
           # Copia semplicemente la nuova playlist (contiene già tutto aggiornato)
@@ -156,6 +198,7 @@ jobs:
           echo "NEW_COUNT=$NEW_COUNT" >> $GITHUB_ENV
           echo "FINAL_COUNT=$NEW_COUNT" >> $GITHUB_ENV
           echo "OPERATION=$OPERATION_TYPE" >> $GITHUB_ENV
+          echo "USED_URL=$USED_URL" >> $GITHUB_ENV
           
           # Verifica finale
           FINAL=$(grep -c "^#EXTINF" merged.m3u 2>/dev/null || echo 0)
@@ -216,6 +259,7 @@ jobs:
             echo "| **Stato** | ⏸️ Saltato (finestra reset) |" >> $GITHUB_STEP_SUMMARY
           else
             echo "| **Tipo** | ${OPERATION:-Aggiornamento} |" >> $GITHUB_STEP_SUMMARY
+            echo "| **URL Usato** | ${USED_URL:-N/A} |" >> $GITHUB_STEP_SUMMARY
             echo "| **Canali Precedenti** | ${OLD_COUNT:-0} |" >> $GITHUB_STEP_SUMMARY
             echo "| **Canali Nuovi** | ${NEW_COUNT:-0} |" >> $GITHUB_STEP_SUMMARY
             echo "| **Canali Finali** | ${FINAL_COUNT:-0} |" >> $GITHUB_STEP_SUMMARY
