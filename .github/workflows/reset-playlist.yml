@@ -50,13 +50,13 @@ jobs:
         if: steps.verify_time.outputs.proceed == 'true'
         run: |
           echo "🌙 Creo playlist vuota per reset mezzanotte..."
-          echo "#EXTM3U" > reset.m3u
+          echo "#EXTM3U" > merged.m3u
           
           echo ""
           echo "📊 RESET COMPLETATO:"
           echo "- Canali: 0"
-          echo "- Dimensione: $(wc -c < reset.m3u) bytes"
-          echo "- Hash: $(sha256sum reset.m3u | awk '{print $1}')"
+          echo "- Dimensione: $(wc -c < merged.m3u) bytes"
+          echo "- Hash: $(sha256sum merged.m3u | awk '{print $1}')"
 
       - name: Aggiorna Gist
         if: steps.verify_time.outputs.proceed == 'true'
@@ -64,8 +64,31 @@ jobs:
         with:
           token: ${{ secrets.GIST_TOKEN }}
           gist_id: ${{ secrets.GIST_ID }}
-          file_path: reset.m3u
+          file_path: merged.m3u
           file_type: text
+      
+      - name: Verifica aggiornamento Gist
+        if: steps.verify_time.outputs.proceed == 'true'
+        run: |
+          echo "🔍 Verifica aggiornamento Gist..."
+          sleep 5
+          
+          GIST_URL="https://gist.githubusercontent.com/${{ github.repository_owner }}/${{ secrets.GIST_ID }}/raw/merged.m3u"
+          
+          if curl -s -f "$GIST_URL" -o verificato.m3u; then
+            CANALI=$(grep -c "^#EXTINF" verificato.m3u 2>/dev/null || echo 0)
+            echo "✅ Gist aggiornato - Canali: $CANALI"
+            
+            if [ $CANALI -eq 0 ]; then
+              echo "✅ RESET CONFERMATO - Playlist vuota"
+            else
+              echo "⚠️ ATTENZIONE - Trovati ancora $CANALI canali!"
+              exit 1
+            fi
+          else
+            echo "❌ Impossibile verificare Gist"
+            exit 1
+          fi
 
       - name: Riepilogo Reset
         if: always()
