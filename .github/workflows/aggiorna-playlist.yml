@@ -98,7 +98,7 @@ jobs:
               --connect-timeout 30 \
               --max-time 60 \
               -H "User-Agent: GitHubAction-PlaylistUpdater/1.0" \
-              https://xromtv.com/italia/player/eventi)
+              https://xromtv.com/italia/player/eventi3)
             
             if [ "$HTTP_CODE" = "200" ]; then
               echo "✅ Download completato (HTTP $HTTP_CODE)"

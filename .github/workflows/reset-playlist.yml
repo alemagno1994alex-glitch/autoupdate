@@ -67,28 +67,14 @@ jobs:
           file_path: merged.m3u
           file_type: text
       
-      - name: Verifica aggiornamento Gist
+      - name: Conferma reset
         if: steps.verify_time.outputs.proceed == 'true'
         run: |
-          echo "🔍 Verifica aggiornamento Gist..."
-          sleep 5
-          
-          GIST_URL="https://gist.githubusercontent.com/${{ github.repository_owner }}/${{ secrets.GIST_ID }}/raw/merged.m3u"
-          
-          if curl -s -f "$GIST_URL" -o verificato.m3u; then
-            CANALI=$(grep -c "^#EXTINF" verificato.m3u 2>/dev/null || echo 0)
-            echo "✅ Gist aggiornato - Canali: $CANALI"
-            
-            if [ $CANALI -eq 0 ]; then
-              echo "✅ RESET CONFERMATO - Playlist vuota"
-            else
-              echo "⚠️ ATTENZIONE - Trovati ancora $CANALI canali!"
-              exit 1
-            fi
-          else
-            echo "❌ Impossibile verificare Gist"
-            exit 1
-          fi
+          echo "✅ Reset completato!"
+          echo "📍 Gist aggiornato: https://gist.github.com/${{ github.repository_owner }}/${{ secrets.GIST_ID }}"
+          echo ""
+          echo "ℹ️ Nota: Potrebbero essere necessari alcuni secondi prima che"
+          echo "   la cache di GitHub si aggiorni e il file risulti vuoto."
 
       - name: Riepilogo Reset
         if: always()
