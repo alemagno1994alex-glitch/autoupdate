@@ -32,7 +32,7 @@ permissions:
 jobs:
   update-playlist:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     
     steps:
       - name: Debug - Info esecuzione
@@ -59,6 +59,21 @@ jobs:
           
           echo "✅ Orario valido per aggiornamento ($CURRENT_HOUR:xx)"
           echo "proceed=true" >> $GITHUB_OUTPUT
+
+      - name: Test connettività XromTV
+        if: steps.verify_time.outputs.proceed == 'true'
+        id: connectivity_test
+        continue-on-error: true
+        run: |
+          echo "🌐 Test connettività al server XromTV..."
+          
+          if curl -I -s --connect-timeout 10 --max-time 20 https://xromtv.com/ | head -1; then
+            echo "✅ Server raggiungibile"
+            echo "reachable=true" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️ Server non raggiungibile o lento"
+            echo "reachable=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Scarica M3U esistente dal Gist
         if: steps.verify_time.outputs.proceed == 'true'
@@ -96,7 +111,7 @@ jobs:
             echo "type=update" >> $GITHUB_OUTPUT
           fi
 
-      - name: Scarica playlist da XromTV (con fallback)
+      - name: Scarica playlist da XromTV (con fallback migliorato)
         if: steps.verify_time.outputs.proceed == 'true'
         id: download
         run: |
@@ -114,10 +129,12 @@ jobs:
             "https://xromtv.com/italia/player/eventi4"
           )
           
-          MAX_RETRIES=2
-          RETRY_DELAY=15
+          MAX_RETRIES=3
+          RETRY_DELAY=20
           SUCCESS=false
           USED_URL=""
+          LAST_HTTP_CODE=""
+          LAST_ERROR=""
           
           # Prova ogni URL
           for URL in "${URLS[@]}"; do
@@ -127,15 +144,31 @@ jobs:
             for i in $(seq 1 $MAX_RETRIES); do
               echo "  🔄 Tentativo $i di $MAX_RETRIES..."
               
+              # Download con maggiori dettagli
               HTTP_CODE=$(curl -s -o new_playlist.m3u -w "%{http_code}" \
-                --connect-timeout 30 \
-                --max-time 60 \
-                -H "User-Agent: GitHubAction-PlaylistUpdater/1.0" \
-                "$URL")
+                --connect-timeout 40 \
+                --max-time 90 \
+                -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36" \
+                -H "Accept: */*" \
+                -H "Accept-Language: it-IT,it;q=0.9,en;q=0.8" \
+                -H "Referer: https://xromtv.com/" \
+                "$URL" 2>&1)
+              
+              LAST_HTTP_CODE="$HTTP_CODE"
+              
+              echo "  📊 HTTP Code: $HTTP_CODE"
               
               if [ "$HTTP_CODE" = "200" ] && [ -s new_playlist.m3u ]; then
                 # Verifica che contenga canali
                 NEW_COUNT=$(grep -c "^#EXTINF" new_playlist.m3u 2>/dev/null || echo 0)
+                FILE_SIZE=$(wc -c < new_playlist.m3u)
+                
+                echo "  📦 Dimensione file: $FILE_SIZE bytes"
+                echo "  📺 Canali trovati: $NEW_COUNT"
+                
+                # Mostra prime righe per debug
+                echo "  📄 Prime 5 righe del file:"
+                head -5 new_playlist.m3u | sed 's/^/     /'
                 
                 if [ $NEW_COUNT -gt 0 ]; then
                   echo "  ✅ Download completato! (HTTP $HTTP_CODE - $NEW_COUNT canali)"
@@ -143,22 +176,33 @@ jobs:
                   USED_URL="$URL"
                   break 2  # Esce da entrambi i loop
                 else
-                  echo "  ⚠️ File scaricato ma senza canali"
+                  LAST_ERROR="File scaricato ma senza canali validi (size: $FILE_SIZE)"
+                  echo "  ⚠️ $LAST_ERROR"
                 fi
               elif [ "$HTTP_CODE" = "429" ]; then
+                LAST_ERROR="Rate limit (HTTP 429)"
+                echo "  ⚠️ $LAST_ERROR"
                 if [ $i -lt $MAX_RETRIES ]; then
-                  echo "  ⏳ Rate limit - Attendo ${RETRY_DELAY}s..."
+                  echo "  ⏳ Attendo ${RETRY_DELAY}s prima di riprovare..."
                   sleep $RETRY_DELAY
-                else
-                  echo "  ❌ Rate limit persistente"
                 fi
+              elif [ "$HTTP_CODE" = "000" ]; then
+                LAST_ERROR="Timeout o errore di connessione"
+                echo "  ❌ $LAST_ERROR"
               else
-                echo "  ❌ Errore HTTP: $HTTP_CODE"
+                LAST_ERROR="Errore HTTP: $HTTP_CODE"
+                echo "  ❌ $LAST_ERROR"
+                
+                # Mostra eventuale contenuto di errore
+                if [ -s new_playlist.m3u ]; then
+                  echo "  📄 Contenuto risposta:"
+                  head -10 new_playlist.m3u | sed 's/^/     /'
+                fi
               fi
               
               # Pausa tra tentativi
               if [ $i -lt $MAX_RETRIES ]; then
-                sleep 5
+                sleep 8
               fi
             done
             
@@ -168,32 +212,55 @@ jobs:
             
             # Pausa prima di provare il prossimo URL
             echo "  ⏭️ Passo al prossimo URL..."
-            sleep 5
+            sleep 10
           done
           
           # Verifica successo finale
           if [ "$SUCCESS" = false ]; then
             echo ""
+            echo "❌ =========================================="
             echo "❌ ERRORE: Tutti gli URL hanno fallito!"
-            echo "   URLs provati:"
+            echo "❌ =========================================="
+            echo ""
+            echo "📋 DETTAGLI DIAGNOSTICI:"
+            echo "- Ultimo HTTP Code: $LAST_HTTP_CODE"
+            echo "- Ultimo errore: $LAST_ERROR"
+            echo "- Server raggiungibile: ${{ steps.connectivity_test.outputs.reachable }}"
+            echo ""
+            echo "🔗 URLs provati:"
             for URL in "${URLS[@]}"; do
               echo "   - $URL"
             done
+            echo ""
+            echo "💡 POSSIBILI CAUSE:"
+            echo "   1. XromTV temporaneamente offline"
+            echo "   2. Cambio struttura URL/API"
+            echo "   3. Blocco IP GitHub Actions"
+            echo "   4. Rate limiting troppo aggressivo"
+            echo ""
+            
+            # Salva info errore per il riepilogo
+            echo "error_code=$LAST_HTTP_CODE" >> $GITHUB_OUTPUT
+            echo "error_msg=$LAST_ERROR" >> $GITHUB_OUTPUT
+            
             exit 1
           fi
           
           # Output risultati
           NEW_COUNT=$(grep -c "^#EXTINF" new_playlist.m3u 2>/dev/null || echo 0)
           echo ""
+          echo "✅ =========================================="
           echo "✅ SUCCESSO!"
+          echo "✅ =========================================="
           echo "📺 Canali nella nuova playlist: $NEW_COUNT"
           echo "🔗 URL utilizzato: $USED_URL"
+          echo "📦 Dimensione: $(wc -c < new_playlist.m3u) bytes"
           
           echo "new_count=$NEW_COUNT" >> $GITHUB_OUTPUT
           echo "used_url=$USED_URL" >> $GITHUB_OUTPUT
 
       - name: Processa e aggiorna playlist
-        if: steps.verify_time.outputs.proceed == 'true'
+        if: steps.verify_time.outputs.proceed == 'true' && steps.download.outcome == 'success'
         run: |
           OPERATION_TYPE="${{ steps.operation.outputs.type }}"
           EXISTING_COUNT="${{ steps.download_existing.outputs.existing_count }}"
@@ -225,7 +292,7 @@ jobs:
           echo "- Dimensione file: $(wc -c < merged.m3u) bytes"
 
       - name: Calcola hash e verifica cambiamenti
-        if: steps.verify_time.outputs.proceed == 'true'
+        if: steps.verify_time.outputs.proceed == 'true' && steps.download.outcome == 'success'
         id: check
         run: |
           NEW_HASH=$(sha256sum merged.m3u | awk '{print $1}')
@@ -248,7 +315,7 @@ jobs:
           fi
 
       - name: Cache hash
-        if: steps.verify_time.outputs.proceed == 'true'
+        if: steps.verify_time.outputs.proceed == 'true' && steps.download.outcome == 'success'
         uses: actions/cache@v4
         with:
           path: last_hash.txt
@@ -275,6 +342,16 @@ jobs:
           
           if [ "${{ steps.verify_time.outputs.proceed }}" != "true" ]; then
             echo "| **Stato** | ⏸️ Saltato (finestra reset) |" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ steps.download.outcome }}" == "failure" ]; then
+            echo "| **Stato** | ❌ ERRORE DOWNLOAD |" >> $GITHUB_STEP_SUMMARY
+            echo "| **HTTP Code** | ${{ steps.download.outputs.error_code }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Errore** | ${{ steps.download.outputs.error_msg }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Server Raggiungibile** | ${{ steps.connectivity_test.outputs.reachable }} |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "#### 🔍 Diagnostica" >> $GITHUB_STEP_SUMMARY
+            echo "- Verifica che XromTV.com sia online" >> $GITHUB_STEP_SUMMARY
+            echo "- Controlla se gli URL sono cambiati" >> $GITHUB_STEP_SUMMARY
+            echo "- Possibile blocco IP da GitHub Actions" >> $GITHUB_STEP_SUMMARY
           else
             echo "| **Tipo** | ${OPERATION:-Aggiornamento} |" >> $GITHUB_STEP_SUMMARY
             echo "| **URL Usato** | ${USED_URL:-N/A} |" >> $GITHUB_STEP_SUMMARY
@@ -283,13 +360,11 @@ jobs:
             echo "| **Canali Finali** | ${FINAL_COUNT:-0} |" >> $GITHUB_STEP_SUMMARY
             echo "| **Cambiamenti** | ${{ steps.check.outputs.changed == 'true' && '✅ Sì' || '⏭️ No' }} |" >> $GITHUB_STEP_SUMMARY
             echo "| **Gist Aggiornato** | ${{ steps.check.outputs.changed == 'true' && '✅ Sì' || '⏭️ No' }} |" >> $GITHUB_STEP_SUMMARY
-            echo "| **Stato** | ${{ job.status == 'success' && '✅ OK' || '❌ Errore' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Stato** | ✅ OK |" >> $GITHUB_STEP_SUMMARY
           fi
           
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**⏰ Prossimi aggiornamenti (ora italiana):**" >> $GITHUB_STEP_SUMMARY
-          echo "- 12:30 - Primo caricamento giornaliero" >> $GITHUB_STEP_SUMMARY
-          echo "- 15:00 - Aggiornamento pomeridiano" >> $GITHUB_STEP_SUMMARY
-          echo "- 18:00 - Aggiornamento serale" >> $GITHUB_STEP_SUMMARY
-          echo "- 20:45 - Aggiornamento finale" >> $GITHUB_STEP_SUMMARY
+          echo "- 11:15, 12:15, 13:15, 14:15, 15:15, 16:15, 17:15, 18:15, 19:15" >> $GITHUB_STEP_SUMMARY
+          echo "- 21:45 - Aggiornamento finale" >> $GITHUB_STEP_SUMMARY
           echo "- 00:15 - Reset automatico" >> $GITHUB_STEP_SUMMARY
