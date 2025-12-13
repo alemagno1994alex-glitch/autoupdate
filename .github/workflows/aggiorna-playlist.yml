@@ -90,10 +90,10 @@ jobs:
         run: |
           # Lista URL da provare in ordine
           URLS=(
-            "https://xromtv.com/italia/player/eventi"
-            "https://xromtv.com/italia/player/eventi1"
-            "https://xromtv.com/italia/player/eventi2"
-            "https://xromtv.com/italia/player/eventi3"
+            "https://xromtv.com/italia/player/eventi.json"
+            "https://xromtv.com/italia/player/eventi1.json"
+            "https://xromtv.com/italia/player/eventi2.json"
+            "https://xromtv.com/italia/player/eventi3.json"
           )
           
           MAX_RETRIES=2
