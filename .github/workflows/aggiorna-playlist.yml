@@ -1,4 +1,4 @@
-name: Aggiorna Playlist XromTV
+name: Aggiorna Playlist
 on:
   schedule:
     # ORA SOLARE (gen-mar, ott-dic): UTC+1
