@@ -2,8 +2,8 @@ name: Aggiorna Playlist
 on:
   schedule:
     # ORA SOLARE (gen-mar, ott-dic): UTC+1
-    - cron: '15 10 * 1-3,10-12 *'  # 11:15 italiana
-    - cron: '15 11 * 1-3,10-12 *'  # 12:15 italiana
+    
+    - cron: '00 11 * 1-3,10-12 *'  # 12:15 italiana
     - cron: '15 12 * 1-3,10-12 *'  # 13:15 italiana
     - cron: '15 13 * 1-3,10-12 *'  # 14:15 italiana
     - cron: '15 14 * 1-3,10-12 *'  # 15:15 italiana
@@ -14,8 +14,8 @@ on:
     - cron: '45 20 * 1-3,10-12 *'  # 21:45 italiana (ultimo aggiornamento)
     
     # ORA LEGALE (apr-set): UTC+2
-    - cron: '15 9  * 4-9 *'  # 11:15 italiana
-    - cron: '15 10 * 4-9 *'  # 12:15 italiana
+    
+    - cron: '00 10 * 4-9 *'  # 12:15 italiana
     - cron: '15 11 * 4-9 *'  # 13:15 italiana
     - cron: '15 12 * 4-9 *'  # 14:15 italiana
     - cron: '15 13 * 4-9 *'  # 15:15 italiana
