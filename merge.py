@@ -6,9 +6,9 @@ from pathlib import Path
 # URL da unire
 URLS = [
     "https://blackzone.gt.tc/cielo_del_rom.php?page=cinema",  # protetto → Playwright
-    "https://xromtv.com/italia/player/intrattenimento-_-xrom-_-italia",
-    "http://xromtv.com/italia/player/sports-_-xrom-_-italia",
-    "https://xromtv.com/italia/player/bambini-_-xrom-_-italia"
+    "https://blackzone.gt.tc/cielo_del_rom.php?page=intrattenimento",
+    "https://blackzone.gt.tc/cielo_del_rom.php?page=sport",
+    "https://blackzone.gt.tc/cielo_del_rom.php?page=kids"
 ]
 
 OUTPUT = "solo_sky.m3u"
