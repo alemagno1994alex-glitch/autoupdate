@@ -22,40 +22,73 @@ jobs:
         playwright install chromium
         
     - name: Esegui script merge
-      run: python merge.py
-      
+      run: |
+        python merge.py
+        echo "✓ Script completato"
+        
+    - name: Verifica file generato
+      run: |
+        if [ ! -f "solo_sky.m3u" ]; then
+          echo "❌ ERRORE: File solo_sky.m3u non trovato!"
+          exit 1
+        fi
+        echo "✓ File trovato"
+        echo "Dimensione: $(wc -c < solo_sky.m3u) bytes"
+        echo "Righe: $(wc -l < solo_sky.m3u)"
+        echo ""
+        echo "Prime 10 righe:"
+        head -n 10 solo_sky.m3u
+        
     - name: Aggiorna Gist
       env:
         GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
       run: |
+        set -e  # Ferma se ci sono errori
+        
         GIST_ID="b71033bb6af056f644c1b5890fd75c99"
-        FILE="solo_sky.m3u"
         
-        # Crea payload JSON usando Python per gestire correttamente escape e newline
-        python3 << 'EOF'
+        echo "Creazione payload JSON..."
+        python3 << 'PYTHON_EOF'
         import json
-        import sys
         
-        with open("solo_sky.m3u", "r", encoding="utf-8") as f:
-            content = f.read()
-        
-        payload = {
-            "files": {
-                "solo_sky.m3u": {
-                    "content": content
+        try:
+            with open("solo_sky.m3u", "r", encoding="utf-8") as f:
+                content = f.read()
+            
+            payload = {
+                "files": {
+                    "solo_sky.m3u": {
+                        "content": content
+                    }
                 }
             }
-        }
+            
+            with open("gist_payload.json", "w", encoding="utf-8") as f:
+                json.dump(payload, f, ensure_ascii=False)
+            
+            print(f"✓ Payload creato: {len(content)} caratteri")
+        except Exception as e:
+            print(f"❌ Errore nella creazione payload: {e}")
+            exit(1)
+        PYTHON_EOF
         
-        with open("gist_payload.json", "w", encoding="utf-8") as f:
-            json.dump(payload, f)
-        EOF
-        
-        # Invia l'aggiornamento al Gist
-        curl -X PATCH \
+        echo "Invio richiesta a GitHub Gist API..."
+        RESPONSE=$(curl -s -w "\n%{http_code}" -X PATCH \
           -H "Authorization: token $GIST_TOKEN" \
           -H "Content-Type: application/json" \
           -d @gist_payload.json \
-          https://api.github.com/gists/$GIST_ID
+          https://api.github.com/gists/$GIST_ID)
         
-        echo "✓ Gist aggiornato con successo!"
+        HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+        BODY=$(echo "$RESPONSE" | head -n-1)
+        
+        echo "HTTP Status: $HTTP_CODE"
+        
+        if [ "$HTTP_CODE" -eq 200 ] || [ "$HTTP_CODE" -eq 201 ]; then
+          echo "✓ Gist aggiornato con successo!"
+        else
+          echo "❌ ERRORE nell'aggiornamento del Gist"
+          echo "Response body:"
+          echo "$BODY"
+          exit 1
+        fi
