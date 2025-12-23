@@ -1,40 +1,61 @@
 name: Aggiorna Playlist
-
 on:
   schedule:
-    - cron: "*/30 * * * *"
+    - cron: "0 9 * * *"
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
-
+      
     - name: Setup Python
       uses: actions/setup-python@v4
       with:
         python-version: "3.11"
-
+        
     - name: Install dependencies
       run: |
         pip install playwright requests
         playwright install chromium
-
+        
     - name: Esegui script merge
       run: python merge.py
-
+      
     - name: Aggiorna Gist
       env:
         GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
       run: |
-        gist_id="b71033bb6af056f644c1b5890fd75c99"
-        file="solo_sky.m3u"
-
+        GIST_ID="b71033bb6af056f644c1b5890fd75c99"
+        FILE="solo_sky.m3u"
+        
+        # Crea payload JSON usando Python per gestire correttamente escape e newline
+        python3 << 'EOF'
+        import json
+        import sys
+        
+        with open("solo_sky.m3u", "r", encoding="utf-8") as f:
+            content = f.read()
+        
+        payload = {
+            "files": {
+                "solo_sky.m3u": {
+                    "content": content
+                }
+            }
+        }
+        
+        with open("gist_payload.json", "w", encoding="utf-8") as f:
+            json.dump(payload, f)
+        EOF
+        
+        # Invia l'aggiornamento al Gist
         curl -X PATCH \
           -H "Authorization: token $GIST_TOKEN" \
           -H "Content-Type: application/json" \
-          -d "{\"files\": {\"solo_sky.m3u\": {\"content\": \"$(sed 's/\"/\\"/g' $file)\"}}}" \
-          https://api.github.com/gists/$gist_id
+          -d @gist_payload.json \
+          https://api.github.com/gists/$GIST_ID
+        
+        echo "✓ Gist aggiornato con successo!"
