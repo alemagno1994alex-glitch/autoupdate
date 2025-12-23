@@ -39,4 +39,4 @@ jobs:
           -H "Authorization: token $GIST_TOKEN" \
           -H "Content-Type: application/json" \
           -d @gist.json \
-          https://api.github.com/gists/b71033bb6af056f644c1b5890fd75c99
+          https://api.github.com/gists/b5a78b8c6e9d6e895c6ccbb030f565a2
