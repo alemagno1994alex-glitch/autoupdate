@@ -1,5 +1,4 @@
 name: Aggiorna Playlist
-
 on:
   schedule:
     - cron: "0 9 * * *"
@@ -8,33 +7,36 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
-
-    - name: Setup Python
-      uses: actions/setup-python@v4
+    - uses: actions/checkout@v3
+    
+    - uses: actions/setup-python@v4
       with:
         python-version: "3.11"
-
-    - name: Install dependencies
+    
+    - name: Install
       run: |
         pip install playwright requests
         playwright install chromium
-
-    - name: Esegui script merge
+    
+    - name: Merge
       run: python merge.py
-
-    - name: Aggiorna Gist
+    
+    - name: Upload Gist
       env:
         GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
       run: |
-        gist_id="b71033bb6af056f644c1b5890fd75c99"
-        file="solo_sky.m3u"
-
+        python3 << 'EOF'
+        import json
+        with open("solo_sky.m3u") as f:
+            content = f.read()
+        payload = {"files": {"solo_sky.m3u": {"content": content}}}
+        with open("gist.json", "w") as f:
+            json.dump(payload, f)
+        EOF
+        
         curl -X PATCH \
           -H "Authorization: token $GIST_TOKEN" \
           -H "Content-Type: application/json" \
-          -d "{\"files\": {\"solo_sky.m3u\": {\"content\": \"$(sed 's/\"/\\"/g' $file)\"}}}" \
-          https://api.github.com/gists/$gist_id
+          -d @gist.json \
+          https://api.github.com/gists/b71033bb6af056f644c1b5890fd75c99
