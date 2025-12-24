@@ -1,13 +1,26 @@
 name: Aggiorna Playlist
 on:
   schedule:
-    - cron: "0 9 * * *"
+    # ORA SOLARE (gen-mar, ott-dic): UTC+1 → 09:00 italiana = 08:00 UTC
+    - cron: '0 8 * 1-3,10-12 *'
+    
+    # ORA LEGALE (apr-set): UTC+2 → 09:00 italiana = 07:00 UTC
+    - cron: '0 7 * 4-9 *'
+  
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+    - name: Debug - Info esecuzione
+      run: |
+        echo "📋 ============ AGGIORNA PLAYLIST ============"
+        echo "📅 Data/Ora italiana: $(TZ='Europe/Rome' date '+%Y-%m-%d %H:%M:%S %Z')"
+        echo "🌍 Data/Ora UTC: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+        echo "⚙️  Trigger: ${{ github.event_name }}"
+        echo "============================================="
+    
     - uses: actions/checkout@v3
     
     - uses: actions/setup-python@v4
@@ -40,3 +53,31 @@ jobs:
           -H "Content-Type: application/json" \
           -d @gist.json \
           https://api.github.com/gists/b5a78b8c6e9d6e895c6ccbb030f565a2
+    
+    - name: Riepilogo
+      if: always()
+      run: |
+        echo "### 📋 Riepilogo Aggiornamento Playlist" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Parametro | Valore |" >> $GITHUB_STEP_SUMMARY
+        echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+        echo "| **Ora (Italia)** | $(TZ='Europe/Rome' date '+%Y-%m-%d %H:%M:%S') |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Trigger** | ${{ github.event_name == 'workflow_dispatch' && '🔧 Manuale' || '⏰ Automatico' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Stato** | ${{ job.status == 'success' && '✅ OK' || '❌ Errore' }} |" >> $GITHUB_STEP_SUMMARY
+```
+
+## Differenze chiave rispetto al tuo workflow originale:
+
+1. **Due cron separati** per ora legale/solare:
+   - `'0 8 * 1-3,10-12 *'` → gennaio-marzo e ottobre-dicembre (ora solare)
+   - `'0 7 * 4-9 *'` → aprile-settembre (ora legale)
+
+2. **Rimosso `push:`** - non serve se hai già un altro workflow attivo
+
+3. **Aggiunto step di debug** - così vedi sempre quando parte e l'orario
+
+## Test immediato
+
+Esegui manualmente per verificare che funzioni:
+```
+Actions → "Aggiorna Playlist" → Run workflow
