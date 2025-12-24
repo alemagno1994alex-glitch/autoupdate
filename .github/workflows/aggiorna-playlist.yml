@@ -12,72 +12,39 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    
     steps:
-    - name: Debug - Info esecuzione
-      run: |
-        echo "📋 ============ AGGIORNA PLAYLIST ============"
-        echo "📅 Data/Ora italiana: $(TZ='Europe/Rome' date '+%Y-%m-%d %H:%M:%S %Z')"
-        echo "🌍 Data/Ora UTC: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-        echo "⚙️  Trigger: ${{ github.event_name }}"
-        echo "============================================="
+    - name: Checkout
+      uses: actions/checkout@v3
     
-    - uses: actions/checkout@v3
-    
-    - uses: actions/setup-python@v4
+    - name: Setup Python
+      uses: actions/setup-python@v4
       with:
         python-version: "3.11"
     
-    - name: Install
+    - name: Install dependencies
       run: |
         pip install playwright requests
         playwright install chromium
     
-    - name: Merge
+    - name: Run merge script
       run: python merge.py
     
-    - name: Upload Gist
+    - name: Update Gist
       env:
         GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
       run: |
-        python3 << 'EOF'
+        python3 -c '
         import json
         with open("solo_sky.m3u") as f:
             content = f.read()
         payload = {"files": {"solo_sky.m3u": {"content": content}}}
         with open("gist.json", "w") as f:
             json.dump(payload, f)
-        EOF
+        '
         
         curl -X PATCH \
           -H "Authorization: token $GIST_TOKEN" \
           -H "Content-Type: application/json" \
           -d @gist.json \
           https://api.github.com/gists/b5a78b8c6e9d6e895c6ccbb030f565a2
-    
-    - name: Riepilogo
-      if: always()
-      run: |
-        echo "### 📋 Riepilogo Aggiornamento Playlist" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "| Parametro | Valore |" >> $GITHUB_STEP_SUMMARY
-        echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
-        echo "| **Ora (Italia)** | $(TZ='Europe/Rome' date '+%Y-%m-%d %H:%M:%S') |" >> $GITHUB_STEP_SUMMARY
-        echo "| **Trigger** | ${{ github.event_name == 'workflow_dispatch' && '🔧 Manuale' || '⏰ Automatico' }} |" >> $GITHUB_STEP_SUMMARY
-        echo "| **Stato** | ${{ job.status == 'success' && '✅ OK' || '❌ Errore' }} |" >> $GITHUB_STEP_SUMMARY
-```
-
-## Differenze chiave rispetto al tuo workflow originale:
-
-1. **Due cron separati** per ora legale/solare:
-   - `'0 8 * 1-3,10-12 *'` → gennaio-marzo e ottobre-dicembre (ora solare)
-   - `'0 7 * 4-9 *'` → aprile-settembre (ora legale)
-
-2. **Rimosso `push:`** - non serve se hai già un altro workflow attivo
-
-3. **Aggiunto step di debug** - così vedi sempre quando parte e l'orario
-
-## Test immediato
-
-Esegui manualmente per verificare che funzioni:
-```
-Actions → "Aggiorna Playlist" → Run workflow
