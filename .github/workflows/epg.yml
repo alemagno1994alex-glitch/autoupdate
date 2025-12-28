@@ -1,0 +1,56 @@
+name: Copia Periodica EPG
+
+on:
+  schedule:
+    # ORA SOLARE (gen-mar, ott-dic): 09:00 italiana = 08:00 UTC
+    - cron: '0 8 * 1-3,10-12 *'
+    # ORA SOLARE (gen-mar, ott-dic): 22:15 italiana = 21:15 UTC
+    - cron: '15 21 * 1-3,10-12 *'
+    # ORA SOLARE (gen-mar, ott-dic): 23:30 italiana = 22:30 UTC
+    - cron: '30 22 * 1-3,10-12 *'
+    # ORA SOLARE (gen-mar, ott-dic): 00:30 italiana = 23:30 UTC (giorno prima)
+    - cron: '30 23 * 1-3,10-12 *'
+    
+    # ORA LEGALE (apr-set): 09:00 italiana = 07:00 UTC
+    - cron: '0 7 * 4-9 *'
+    # ORA LEGALE (apr-set): 22:15 italiana = 20:15 UTC
+    - cron: '15 20 * 4-9 *'
+    # ORA LEGALE (apr-set): 23:30 italiana = 21:30 UTC
+    - cron: '30 21 * 4-9 *'
+    # ORA LEGALE (apr-set): 00:30 italiana = 22:30 UTC (giorno prima)
+    - cron: '30 22 * 4-9 *'
+  
+  workflow_dispatch: # Permette esecuzione manuale
+
+jobs:
+  update-gist:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Download JSON da corsproxy
+        run: |
+          curl -L "https://corsproxy.io/?https://xromtv.com/sky-ita/sky-_-epg-_-xrom-_-italia.json" \
+            -o sky_epg.json
+      
+      - name: Update Gist
+        env:
+          GITHUB_TOKEN: ${{ secrets.GIST_TOKEN }}
+          GIST_ID: b5a78b8c6e9d6e895c6ccbb030f565a2
+        run: |
+          # Leggi il contenuto del file
+          CONTENT=$(cat sky_epg.json | jq -Rs .)
+          
+          # Aggiorna il Gist
+          curl -X PATCH \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/gists/$GIST_ID" \
+            -d "{\"files\":{\"solo_sky.m3u\":{\"content\":$CONTENT}}}"
+      
+      - name: Verifica risultato
+        run: |
+          echo "Gist aggiornato con successo!"
+          echo "URL: https://gist.githubusercontent.com/alemagno1994alex-glitch/$GIST_ID/raw/solo_sky.m3u"
