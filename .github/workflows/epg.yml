@@ -36,7 +36,7 @@ jobs:
       
       - name: Download JSON da corsproxy
         run: |
-          curl -L "https://xromtv.com/sky-ita/sky-_-epg-_-xrom-_-italia.json" \
+          curl -L "https://xromtv.com/sky-epg-xrom-italia-2026.json" \
             -o sky_epg.json
       
       - name: Update Gist
