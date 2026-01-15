@@ -8,6 +8,7 @@ on:
     
     # ORA LEGALE (apr-set): 00:00 italiana = 22:00 UTC (giorno prima)
     - cron: '0 10 * 4-9 *'
+    - cron: '30 10 * 1-3,10-12 *'
    
   workflow_dispatch: # Permette esecuzione manuale
 
