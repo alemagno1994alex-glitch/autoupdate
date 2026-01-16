@@ -1,0 +1,64 @@
+name: Copia Periodica EPG
+
+on:
+  schedule:
+    # ORA SOLARE (gen-mar, ott-dic): 00:00 italiana = 23:00 UTC (giorno prima)
+   
+    - cron: '0 12 * 1-3,10-12 *'
+    - cron: '30 12 * 1-3,10-12 *'
+    
+    # ORA LEGALE (apr-set): 00:00 italiana = 22:00 UTC (giorno prima)
+    - cron: '0 10 * 4-9 *'
+    - cron: '30 10 * 1-3,10-12 *'
+   
+  workflow_dispatch: # Permette esecuzione manuale
+
+jobs:
+  update-gist:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Download JSON EPG con fallback
+        id: download
+        run: |
+          # Lista di URL da provare in ordine
+          URLS=(
+            "https://xromtv-italia-sky-deng.xrtv-friends-only.workers.dev/"
+           
+          )
+          
+          DOWNLOADED=false
+          
+          for URL in "${URLS[@]}"; do
+            echo "🔄 Tentativo download da: $URL"
+            
+            HTTP_CODE=$(curl -L -w "%{http_code}" -o sky_epg.json \
+              --connect-timeout 30 \
+              --max-time 120 \
+              "$URL" 2>/dev/null)
+            
+            if [ $HTTP_CODE -eq 200 ] && [ -s sky_epg.json ]; then
+              echo "✅ Download riuscito da: $URL"
+              DOWNLOADED=true
+              break
+            else
+              echo "❌ Download fallito (HTTP: $HTTP_CODE)"
+              rm -f sky_epg.json
+            fi
+          done
+          
+          if [ "$DOWNLOADED" = false ]; then
+            echo "❌ Tutti i download sono falliti!"
+            exit 1
+          fi
+          
+          # Verifica che il file sia un JSON valido
+          if ! jq empty sky_epg.json 2>/dev/null; then
+            echo "❌ File scaricato non è un JSON valido"
+            exit 1
+          fi
+          
+          echo "✅ File EPG scaricato e validato correttamente"
