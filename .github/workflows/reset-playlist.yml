@@ -50,13 +50,13 @@ jobs:
         if: steps.verify_time.outputs.proceed == 'true'
         run: |
           echo "🌙 Creo playlist vuota per reset mezzanotte..."
-          echo "#EXTM3U" > merged.m3u
+          echo "#EXTM3U" > eventi.m3u
           
           echo ""
           echo "📊 RESET COMPLETATO:"
           echo "- Canali: 0"
-          echo "- Dimensione: $(wc -c < merged.m3u) bytes"
-          echo "- Hash: $(sha256sum merged.m3u | awk '{print $1}')"
+          echo "- Dimensione: $(wc -c < eventi.m3u) bytes"
+          echo "- Hash: $(sha256sum eventi.m3u | awk '{print $1}')"
 
       - name: Aggiorna Gist
         if: steps.verify_time.outputs.proceed == 'true'
@@ -64,7 +64,7 @@ jobs:
         with:
           token: ${{ secrets.GIST_TOKEN }}
           gist_id: ${{ secrets.GIST_ID }}
-          file_path: merged.m3u
+          file_path: eventi.m3u
           file_type: text
       
       - name: Conferma reset
