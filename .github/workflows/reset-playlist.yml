@@ -63,7 +63,7 @@ jobs:
         uses: exuanbo/actions-deploy-gist@v1
         with:
           token: ${{ secrets.GIST_TOKEN }}
-          gist_id: ${{ secrets.GIST_ID }}
+          gist_id: "b71033bb6af056f644c1b5890fd75c99"
           file_path: eventi.m3u
           file_type: text
       
@@ -71,7 +71,7 @@ jobs:
         if: steps.verify_time.outputs.proceed == 'true'
         run: |
           echo "✅ Reset completato!"
-          echo "📍 Gist aggiornato: https://gist.github.com/${{ github.repository_owner }}/${{ secrets.GIST_ID }}"
+          echo "📍 Gist aggiornato: https://gist.github.com/${{ github.repository_owner }}/b71033bb6af056f644c1b5890fd75c99"
           echo ""
           echo "ℹ️ Nota: Potrebbero essere necessari alcuni secondi prima che"
           echo "   la cache di GitHub si aggiorni e il file risulti vuoto."
