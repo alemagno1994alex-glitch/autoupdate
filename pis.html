@@ -9,14 +9,10 @@
 <style>
   :root {
     --bg: #0d0208;
-    --surface: #080d08;
     --card: #0a110a;
     --border: #0d3b0d;
     --border-bright: #1a6b1a;
     --accent: #00ff41;
-    --accent2: #00dd36;
-    --accent-dim: rgba(0,255,65,0.15);
-    --text: #00ff41;
     --text-dim: #008f11;
     --muted: #005900;
     --glow: 0 0 10px rgba(0,255,65,0.6), 0 0 30px rgba(0,255,65,0.2);
@@ -28,7 +24,7 @@
 
   body {
     background: var(--bg);
-    color: var(--text);
+    color: var(--accent);
     font-family: 'Share Tech Mono', monospace;
     min-height: 100vh;
     padding: 20px;
@@ -40,371 +36,164 @@
   #matrix-canvas {
     position: fixed; top: 0; left: 0;
     width: 100%; height: 100%;
-    z-index: 0; opacity: 0.08;
-    pointer-events: none;
+    z-index: 0; opacity: 0.08; pointer-events: none;
   }
-
   .grid-overlay {
     position: fixed; width: 100%; height: 100%;
     background-image:
       linear-gradient(rgba(0,255,65,0.04) 1px, transparent 1px),
       linear-gradient(90deg, rgba(0,255,65,0.04) 1px, transparent 1px);
-    background-size: 24px 24px;
-    z-index: 1; pointer-events: none;
+    background-size: 24px 24px; z-index: 1; pointer-events: none;
   }
-
   .scanline {
-    position: fixed; top: -100%; left: 0;
-    width: 100%; height: 4px;
+    position: fixed; top: -100%; left: 0; width: 100%; height: 4px;
     background: linear-gradient(transparent, rgba(0,255,65,0.08), transparent);
-    z-index: 2; pointer-events: none;
-    animation: scanMove 8s linear infinite;
+    z-index: 2; pointer-events: none; animation: scanMove 8s linear infinite;
   }
   @keyframes scanMove { 0%{top:-1%} 100%{top:100%} }
 
-  .container {
-    max-width: 1400px;
-    margin: 0 auto;
-    position: relative;
-    z-index: 3;
-  }
+  .container { max-width: 1400px; margin: 0 auto; position: relative; z-index: 3; }
 
-  /* HEADER */
   .header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin: 0 0 20px 0;
-    padding: 18px 20px;
+    display: flex; justify-content: space-between; align-items: center;
+    margin: 0 0 20px 0; padding: 18px 20px;
     background: rgba(8,13,8,0.97);
-    border-bottom: 1px solid var(--border-bright);
-    border-top: 1px solid var(--border-bright);
+    border-bottom: 1px solid var(--border-bright); border-top: 1px solid var(--border-bright);
     box-shadow: 0 0 30px rgba(0,255,65,0.1), inset 0 -1px 0 rgba(0,255,65,0.2);
-    flex-wrap: wrap; gap: 15px;
-    animation: fadeInDown 0.6s ease;
+    flex-wrap: wrap; gap: 15px; animation: fadeInDown 0.6s ease;
   }
-
   .logo {
-    font-family: 'Orbitron', monospace;
-    font-size: 22px; font-weight: 900;
-    letter-spacing: 4px;
-    color: var(--accent);
-    text-shadow: var(--glow);
-    display: flex; align-items: center; gap: 10px;
-    animation: glow 3s ease-in-out infinite;
+    font-family: 'Orbitron', monospace; font-size: 22px; font-weight: 900;
+    letter-spacing: 4px; color: var(--accent); text-shadow: var(--glow);
+    display: flex; align-items: center; gap: 10px; animation: glowAnim 3s ease-in-out infinite;
   }
-  @keyframes glow {
+  @keyframes glowAnim {
     0%,100%{text-shadow:0 0 10px rgba(0,255,65,0.5),0 0 20px rgba(0,255,65,0.2)}
     50%{text-shadow:0 0 20px rgba(0,255,65,0.9),0 0 40px rgba(0,255,65,0.4)}
   }
-
-  .logo-bracket {
-    color: var(--text-dim); font-size: 18px;
-    animation: blink 1.8s step-end infinite;
-  }
+  .logo-bracket { color: var(--text-dim); font-size: 18px; animation: blink 1.8s step-end infinite; }
   @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
 
   .header-right {
     display: flex; align-items: center; gap: 18px;
-    font-size: 11px; color: var(--text-dim); letter-spacing: 2px;
-    flex-wrap: wrap;
+    font-size: 11px; color: var(--text-dim); letter-spacing: 2px; flex-wrap: wrap;
   }
-
   .live-badge {
     display: flex; align-items: center; gap: 8px;
-    border: 1px solid var(--border-bright);
-    padding: 6px 14px;
-    font-size: 11px; letter-spacing: 2px;
-    color: var(--accent);
-    background: rgba(0,255,65,0.04);
+    border: 1px solid var(--border-bright); padding: 6px 14px;
+    font-size: 11px; letter-spacing: 2px; color: var(--accent); background: rgba(0,255,65,0.04);
   }
   .live-dot {
     width: 7px; height: 7px; border-radius: 50%;
-    background: var(--accent); box-shadow: var(--glow-soft);
-    animation: pulse 1.5s infinite;
+    background: var(--accent); box-shadow: var(--glow-soft); animation: pulse 1.5s infinite;
   }
   @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.3;transform:scale(0.7)} }
 
-  /* STATUS */
   .stats-bar {
-    position: relative; z-index: 3;
-    padding: 9px 18px;
-    margin-bottom: 0;
-    background: rgba(8,13,8,0.7);
-    border: 1px solid var(--border);
-    border-bottom: none;
-    font-size: 10px; color: var(--text-dim);
-    letter-spacing: 1px;
+    position: relative; z-index: 3; padding: 9px 18px;
+    background: rgba(8,13,8,0.7); border: 1px solid var(--border); border-bottom: none;
+    font-size: 10px; color: var(--text-dim); letter-spacing: 1px;
     display: flex; align-items: center; gap: 6px;
   }
   .stats-bar::before { content: '> '; color: var(--accent); }
   .stats-bar strong { color: var(--accent); }
 
-  .loading-spinner {
-    display: inline-block; width: 12px; height: 12px;
-    border: 2px solid rgba(0,255,65,0.2);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    vertical-align: middle; margin-right: 6px;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  /* FILTERS */
   .filter-section {
-    margin-bottom: 0;
-    position: relative; z-index: 3;
-    background: rgba(8,13,8,0.9);
-    border: 1px solid var(--border);
-    border-bottom: none;
-    padding: 12px 18px;
-    display: flex; gap: 12px;
-    align-items: center; flex-wrap: wrap;
+    margin-bottom: 0; position: relative; z-index: 3;
+    background: rgba(8,13,8,0.9); border: 1px solid var(--border); border-bottom: none;
+    padding: 12px 18px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
   }
-
-  .filter-prefix {
-    font-size: 10px; color: var(--text-dim);
-    letter-spacing: 2px; white-space: nowrap; flex-shrink: 0;
-  }
-
-  .search-wrap {
-    position: relative; flex: 1;
-    min-width: 180px; max-width: 340px;
-  }
-  .search-wrap svg {
-    position: absolute; left: 10px; top: 50%;
-    transform: translateY(-50%); color: var(--muted);
-  }
+  .filter-prefix { font-size: 10px; color: var(--text-dim); letter-spacing: 2px; white-space: nowrap; flex-shrink: 0; }
+  .search-wrap { position: relative; flex: 1; min-width: 180px; max-width: 340px; }
+  .search-wrap svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); }
   input[type="text"] {
-    width: 100%;
-    background: rgba(0,255,65,0.03);
-    border: 1px solid var(--border-bright);
-    color: var(--accent);
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 11px;
-    padding: 8px 12px 8px 32px;
-    outline: none; letter-spacing: 1px;
-    transition: all 0.3s;
+    width: 100%; background: rgba(0,255,65,0.03); border: 1px solid var(--border-bright);
+    color: var(--accent); font-family: 'Share Tech Mono', monospace; font-size: 11px;
+    padding: 8px 12px 8px 32px; outline: none; letter-spacing: 1px; transition: all 0.3s;
   }
   input[type="text"]::placeholder { color: var(--muted); }
-  input[type="text"]:focus {
-    border-color: var(--accent);
-    box-shadow: 0 0 12px rgba(0,255,65,0.2);
-    background: rgba(0,255,65,0.06);
-  }
+  input[type="text"]:focus { border-color: var(--accent); box-shadow: 0 0 12px rgba(0,255,65,0.2); background: rgba(0,255,65,0.06); }
 
   .filter-btns { display: flex; gap: 5px; flex-wrap: wrap; }
   .filter-btn {
-    background: rgba(0,255,65,0.03);
-    border: 1px solid var(--border);
-    color: var(--muted);
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 9px; letter-spacing: 1.5px;
-    text-transform: uppercase;
-    padding: 6px 11px; cursor: pointer;
-    transition: all 0.2s;
+    background: rgba(0,255,65,0.03); border: 1px solid var(--border); color: var(--muted);
+    font-family: 'Share Tech Mono', monospace; font-size: 9px; letter-spacing: 1.5px;
+    text-transform: uppercase; padding: 6px 11px; cursor: pointer; transition: all 0.2s;
   }
-  .filter-btn:hover {
-    border-color: var(--border-bright);
-    color: var(--text-dim);
-    background: rgba(0,255,65,0.06);
-  }
-  .filter-btn.active {
-    background: rgba(0,255,65,0.12);
-    border-color: var(--accent);
-    color: var(--accent);
-    box-shadow: 0 0 8px rgba(0,255,65,0.2);
-  }
+  .filter-btn:hover { border-color: var(--border-bright); color: var(--text-dim); background: rgba(0,255,65,0.06); }
+  .filter-btn.active { background: rgba(0,255,65,0.12); border-color: var(--accent); color: var(--accent); box-shadow: 0 0 8px rgba(0,255,65,0.2); }
 
-  /* CATEGORY LABEL */
   .category-label {
-    font-family: 'Orbitron', monospace;
-    font-size: 13px; font-weight: 700;
-    letter-spacing: 4px; color: var(--text-dim);
-    margin: 22px 0 18px; padding-bottom: 10px;
-    border-bottom: 1px solid var(--border);
-    display: flex; align-items: center; gap: 12px;
+    font-family: 'Orbitron', monospace; font-size: 13px; font-weight: 700;
+    letter-spacing: 4px; color: var(--text-dim); margin: 22px 0 18px; padding-bottom: 10px;
+    border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px;
     text-transform: uppercase; position: relative; z-index: 3;
   }
   .category-label::before { content: '> '; color: var(--accent); text-shadow: var(--glow-soft); }
 
-  /* GRID */
   .channel-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
-    gap: 10px;
-    position: relative; z-index: 3;
-    animation: fadeInUp 0.8s ease;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+    gap: 10px; position: relative; z-index: 3; animation: fadeInUp 0.8s ease;
   }
 
-  /* CARD */
   .channel-card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    overflow: hidden; cursor: pointer;
-    position: relative; height: 138px;
-    transition: all 0.3s;
-    text-decoration: none; display: block;
-    outline: none;
+    background: var(--card); border: 1px solid var(--border);
+    overflow: hidden; cursor: pointer; position: relative; height: 138px;
+    transition: all 0.3s; display: block; outline: none;
   }
   .channel-card::after {
-    content: '';
-    position: absolute; inset: 0;
-    background: repeating-linear-gradient(
-      0deg, transparent, transparent 2px,
-      rgba(0,0,0,0.1) 2px, rgba(0,0,0,0.1) 4px
-    );
+    content: ''; position: absolute; inset: 0;
+    background: repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.1) 2px,rgba(0,0,0,0.1) 4px);
     pointer-events: none; z-index: 1;
   }
-  .channel-card:hover, .channel-card:focus {
-    border-color: var(--border-bright);
-    transform: translateY(-4px);
+  .channel-card:hover,.channel-card:focus {
+    border-color: var(--border-bright); transform: translateY(-4px);
     box-shadow: 0 0 20px rgba(0,255,65,0.15), 0 8px 30px rgba(0,0,0,0.5);
   }
-
   .channel-logo-wrapper {
-    width: 100%; height: 100%;
-    position: absolute; top: 0; left: 0;
-    display: flex; align-items: center; justify-content: center;
-    overflow: hidden;
+    width: 100%; height: 100%; position: absolute; top: 0; left: 0;
+    display: flex; align-items: center; justify-content: center; overflow: hidden;
   }
   .channel-logo {
-    width: 100%; height: 100%;
-    object-fit: contain; position: relative; z-index: 1;
-    filter: saturate(0.5) brightness(0.7) hue-rotate(90deg) sepia(0.3);
-    transition: filter 0.4s;
+    width: 100%; height: 100%; object-fit: contain; position: relative; z-index: 1;
+    filter: saturate(0.5) brightness(0.7) hue-rotate(90deg) sepia(0.3); transition: filter 0.4s;
   }
-  .channel-card:hover .channel-logo,
-  .channel-card:focus .channel-logo {
-    filter: saturate(0.9) brightness(1) hue-rotate(80deg);
-  }
-
-  /* Text-based logos */
-  .channel-text-logo {
-    width: 100%; height: 100%;
-    display: flex; flex-direction: column;
-    justify-content: center; align-items: center;
-    gap: 4px;
-    position: relative; z-index: 1;
-  }
-  .channel-text-logo .tl-main {
-    font-family: 'Orbitron', monospace;
-    font-weight: 900;
-    color: var(--accent);
-    text-shadow: 0 0 12px rgba(0,255,65,0.6);
-    line-height: 1;
-  }
-  .channel-text-logo .tl-sub {
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 8px;
-    color: var(--text-dim);
-    letter-spacing: 3px;
-    text-transform: uppercase;
-  }
-  .channel-text-logo .tl-num {
-    font-family: 'Orbitron', monospace;
-    font-weight: 700;
-    font-size: 28px;
-    color: var(--accent);
-    text-shadow: 0 0 16px rgba(0,255,65,0.7);
-    line-height: 1;
-  }
-  .channel-card:hover .channel-text-logo .tl-main,
-  .channel-card:hover .channel-text-logo .tl-num,
-  .channel-card:focus .channel-text-logo .tl-main,
-  .channel-card:focus .channel-text-logo .tl-num {
-    text-shadow: 0 0 24px rgba(0,255,65,1), 0 0 40px rgba(0,255,65,0.5);
-  }
-
+  .channel-card:hover .channel-logo,.channel-card:focus .channel-logo { filter: saturate(0.9) brightness(1) hue-rotate(80deg); }
   .channel-placeholder {
-    width: 100%; height: 100%;
-    display: flex; justify-content: center; align-items: center;
-    font-size: 0.72rem;
-    font-family: 'Share Tech Mono', monospace;
-    font-weight: 700; color: var(--accent);
-    text-align: center; text-transform: uppercase;
-    letter-spacing: 1px; text-shadow: var(--glow-soft);
-    padding: 10px;
+    width: 100%; height: 100%; display: flex; justify-content: center; align-items: center;
+    font-size: 0.72rem; font-family: 'Share Tech Mono', monospace; font-weight: 700; color: var(--accent);
+    text-align: center; text-transform: uppercase; letter-spacing: 1px; text-shadow: var(--glow-soft); padding: 10px;
   }
-
   .channel-cat-badge {
-    position: absolute; top: 5px; left: 5px;
-    font-size: 7px; color: var(--muted);
-    letter-spacing: 1px; text-transform: uppercase;
-    z-index: 4;
-    background: rgba(0,0,0,0.75);
-    padding: 2px 5px;
-    border-left: 1px solid var(--border);
+    position: absolute; top: 5px; left: 5px; font-size: 7px; color: var(--muted);
+    letter-spacing: 1px; text-transform: uppercase; z-index: 4;
+    background: rgba(0,0,0,0.75); padding: 2px 5px; border-left: 1px solid var(--border);
   }
-
   .channel-info {
     position: absolute; bottom: 0; left: 0; right: 0;
-    background: linear-gradient(to top, rgba(0,0,0,0.95), rgba(0,0,0,0.7), transparent);
-    z-index: 3;
+    background: linear-gradient(to top,rgba(0,0,0,0.95),rgba(0,0,0,0.7),transparent); z-index: 3;
   }
   .channel-name {
-    width: 100%;
-    display: flex; justify-content: center; align-items: center;
-    padding: 8px 6px;
-    font-size: 0.6rem;
-    font-family: 'Share Tech Mono', monospace;
-    font-weight: 600; color: var(--accent);
-    text-align: center; letter-spacing: 1px;
-    text-shadow: var(--glow-soft);
+    width: 100%; display: flex; justify-content: center; align-items: center;
+    padding: 8px 6px; font-size: 0.6rem; font-family: 'Share Tech Mono', monospace;
+    font-weight: 600; color: var(--accent); text-align: center; letter-spacing: 1px; text-shadow: var(--glow-soft);
   }
-
   .play-overlay {
-    position: absolute; top: 50%; left: 50%;
-    transform: translate(-50%,-50%) scale(0);
-    width: 44px; height: 44px;
-    background: rgba(0,255,65,0.15);
-    border: 2px solid var(--accent);
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%) scale(0);
+    width: 44px; height: 44px; background: rgba(0,255,65,0.15); border: 2px solid var(--accent);
     display: flex; align-items: center; justify-content: center;
-    opacity: 0; transition: all 0.25s;
-    pointer-events: none; z-index: 4;
-    box-shadow: 0 0 20px rgba(0,255,65,0.5);
+    opacity: 0; transition: all 0.25s; pointer-events: none; z-index: 4; box-shadow: 0 0 20px rgba(0,255,65,0.5);
   }
-  .channel-card:hover .play-overlay,
-  .channel-card:focus .play-overlay {
-    opacity: 1; transform: translate(-50%,-50%) scale(1);
-  }
+  .channel-card:hover .play-overlay,.channel-card:focus .play-overlay { opacity: 1; transform: translate(-50%,-50%) scale(1); }
   .play-icon {
-    width: 0; height: 0;
-    border-left: 14px solid var(--accent);
-    border-top: 9px solid transparent;
-    border-bottom: 9px solid transparent;
-    margin-left: 4px;
-    filter: drop-shadow(0 0 4px var(--accent));
-  }
-
-  /* LOADING / ERROR */
-  .loading-state {
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    padding: 80px 20px; gap: 20px;
-    grid-column: 1 / -1;
-  }
-  .spinner {
-    width: 40px; height: 40px;
-    border: 2px solid var(--border);
-    border-top-color: var(--accent);
-    animation: spin 0.7s linear infinite;
-    box-shadow: 0 0 12px rgba(0,255,65,0.3);
-  }
-  .loading-text {
-    font-family: 'Orbitron', monospace;
-    font-size: 11px; letter-spacing: 3px;
-    color: var(--text-dim);
-    animation: blink 1.2s step-end infinite;
+    width: 0; height: 0; border-left: 14px solid var(--accent);
+    border-top: 9px solid transparent; border-bottom: 9px solid transparent;
+    margin-left: 4px; filter: drop-shadow(0 0 4px var(--accent));
   }
   .error-state {
-    grid-column: 1 / -1;
-    text-align: center; padding: 40px 20px;
-    font-size: 11px; color: #ff3333;
-    letter-spacing: 1px;
-    border: 1px solid rgba(255,51,51,0.2);
-    background: rgba(255,0,0,0.03);
-    line-height: 2;
+    grid-column: 1/-1; text-align: center; padding: 40px 20px;
+    font-size: 11px; color: #ff3333; letter-spacing: 1px;
+    border: 1px solid rgba(255,51,51,0.2); background: rgba(255,0,0,0.03); line-height: 2;
   }
 
   ::-webkit-scrollbar { width: 4px; }
@@ -412,15 +201,9 @@
   ::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
   ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
 
-  @keyframes fadeInDown {
-    from{opacity:0;transform:translateY(-20px)} to{opacity:1;transform:translateY(0)}
-  }
-  @keyframes fadeInUp {
-    from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)}
-  }
-  @keyframes cardIn {
-    from{opacity:0;transform:scale(0.93)} to{opacity:1;transform:scale(1)}
-  }
+  @keyframes fadeInDown { from{opacity:0;transform:translateY(-20px)} to{opacity:1;transform:translateY(0)} }
+  @keyframes fadeInUp   { from{opacity:0;transform:translateY(20px)}  to{opacity:1;transform:translateY(0)} }
+  @keyframes spin       { to{transform:rotate(360deg)} }
 
   @media(max-width:768px){
     body{padding:10px}
@@ -428,28 +211,32 @@
     .logo{font-size:15px;letter-spacing:2px}
   }
 
-  /* Preloader overlay */
+  /* ── OVERLAY PRELOAD ── */
   #preload-overlay {
-    display: none;
-    position: fixed; inset: 0;
-    background: rgba(0,0,0,0.85);
-    z-index: 9999;
-    align-items: center; justify-content: center;
-    flex-direction: column; gap: 18px;
+    display: none; position: fixed; inset: 0; z-index: 9999;
+    background: rgba(0,0,0,0.92);
+    flex-direction: column; align-items: center; justify-content: center; gap: 20px;
   }
   #preload-overlay.active { display: flex; }
   #preload-overlay .spinner {
-    width: 50px; height: 50px;
-    border: 2px solid var(--border);
-    border-top-color: var(--accent);
-    animation: spin 0.7s linear infinite;
-    box-shadow: 0 0 20px rgba(0,255,65,0.5);
+    width: 50px; height: 50px; border: 2px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: spin 0.7s linear infinite; box-shadow: 0 0 20px rgba(0,255,65,0.4);
   }
-  #preload-overlay .preload-text {
-    font-family: 'Orbitron', monospace;
-    font-size: 11px; letter-spacing: 3px;
-    color: var(--accent);
-    animation: blink 1.2s step-end infinite;
+  #preload-overlay .preload-title {
+    font-family: 'Orbitron', monospace; font-size: 11px; letter-spacing: 3px;
+    color: var(--accent); animation: blink 1.2s step-end infinite;
+  }
+  #preload-overlay .preload-sub {
+    font-family: 'Share Tech Mono', monospace; font-size: 9px;
+    letter-spacing: 2px; color: var(--text-dim);
+  }
+  #preload-overlay .preload-bar-wrap {
+    width: 220px; height: 2px; background: rgba(0,255,65,0.1); overflow: hidden;
+  }
+  #preload-overlay .preload-bar-fill {
+    height: 100%; background: var(--accent); box-shadow: 0 0 6px var(--accent);
+    width: 0%; transition: width 0.3s linear;
   }
 </style>
 </head>
@@ -459,29 +246,24 @@
 <div class="grid-overlay"></div>
 <div class="scanline"></div>
 
-<!-- Hidden iframe for preloading -->
-<iframe id="preload-iframe" style="display:none;width:0;height:0;border:0;"></iframe>
-
-<!-- Preload overlay -->
+<!-- OVERLAY PRELOAD -->
 <div id="preload-overlay">
   <div class="spinner"></div>
-  <div class="preload-text">CONNESSIONE_IN_CORSO...</div>
+  <div class="preload-title">CONNESSIONE IN CORSO</div>
+  <div class="preload-sub" id="preload-sub">autenticazione sessione...</div>
+  <div class="preload-bar-wrap">
+    <div class="preload-bar-fill" id="preload-bar"></div>
+  </div>
 </div>
 
 <div class="container">
-
   <div class="header">
     <div class="logo">
-      <span class="logo-bracket">[</span>
-      📺 VAVOO IPTV
-      <span class="logo-bracket">]</span>
+      <span class="logo-bracket">[</span>📺 VAVOO IPTV<span class="logo-bracket">]</span>
     </div>
     <div class="header-right">
       <span>GROUP = ITALY &nbsp;|&nbsp; VAVOO-STREAM</span>
-      <div class="live-badge">
-        <span class="live-dot"></span>
-        LIVE STREAM
-      </div>
+      <div class="live-badge"><span class="live-dot"></span>LIVE STREAM</div>
     </div>
   </div>
 
@@ -493,7 +275,7 @@
       </svg>
       <input type="text" id="search-input" placeholder="CERCA_CANALE...">
     </div>
-    <div class="filter-btns" id="filter-bar">
+    <div class="filter-btns">
       <button class="filter-btn active" data-cat="all">TUTTI</button>
       <button class="filter-btn" data-cat="sport">SPORT</button>
       <button class="filter-btn" data-cat="cinema">CINEMA</button>
@@ -502,7 +284,7 @@
     </div>
   </div>
 
-  <div class="stats-bar" id="status">STREAMING_LIVE — <strong id="channel-count">0</strong> canali disponibili</div>
+  <div class="stats-bar">STREAMING_LIVE — <strong id="channel-count">0</strong> canali disponibili</div>
 
   <div class="category-label">
     📡 CANALI IN STREAMING
@@ -510,206 +292,136 @@
   </div>
 
   <div class="channel-grid" id="grid"></div>
-
 </div>
 
-<!-- Matrix Rain -->
 <script>
 (function(){
-  const canvas = document.getElementById('matrix-canvas');
-  const ctx = canvas.getContext('2d');
-  let W, H, cols, drops;
-  const chars = 'アイウエオカキクケコサシスセソタチツテトナニヌネノ0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  function init(){
-    W = canvas.width = window.innerWidth;
-    H = canvas.height = window.innerHeight;
-    cols = Math.floor(W / 14);
-    drops = Array(cols).fill(1);
-  }
-  function draw(){
-    ctx.fillStyle = 'rgba(13,2,8,0.05)';
-    ctx.fillRect(0,0,W,H);
-    ctx.fillStyle = '#00ff41';
-    ctx.font = '14px Share Tech Mono';
-    for(let i=0;i<drops.length;i++){
-      const c = chars[Math.floor(Math.random()*chars.length)];
-      ctx.fillText(c, i*14, drops[i]*14);
-      if(drops[i]*14 > H && Math.random() > 0.975) drops[i] = 0;
-      drops[i]++;
-    }
-  }
-  init();
-  window.addEventListener('resize', init);
-  setInterval(draw, 50);
+  const canvas=document.getElementById('matrix-canvas'),ctx=canvas.getContext('2d');
+  let W,H,cols,drops;
+  const chars='アイウエオカキクケコサシスセソタチツテトナニヌネノ0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  function init(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;cols=Math.floor(W/14);drops=Array(cols).fill(1);}
+  function draw(){ctx.fillStyle='rgba(13,2,8,0.05)';ctx.fillRect(0,0,W,H);ctx.fillStyle='#00ff41';ctx.font='14px Share Tech Mono';for(let i=0;i<drops.length;i++){const c=chars[Math.floor(Math.random()*chars.length)];ctx.fillText(c,i*14,drops[i]*14);if(drops[i]*14>H&&Math.random()>0.975)drops[i]=0;drops[i]++;}}
+  init();window.addEventListener('resize',init);setInterval(draw,50);
 })();
 </script>
 
-<!-- Channel Logic -->
 <script>
-// =============================================
-// CANALI — modifica qui per aggiungerne altri
-// =============================================
+// Worker proxy base URL
+const WORKER = 'https://vavoo.scoopskiski.workers.dev';
+
 const channels = [
-  // SPORT
-  {
-    name: 'Sky cinema uno',
-    logo: 'https://pixel.disco.nowtv.it/logo/skychb_202_lightnow/LOGO_CHANNEL_DARK/4000?language=it-IT&proposition=NOWOTT',
-    cat: 'cinema',
-    href: 'https://chevy.soyspace.cyou/proxy/wind/premium860/mono.m3u8',
-    preload: 'https://dlstreams.top/watch.php?id=860'
-  },
-  {
-    name: 'Sky cinema uno +24',
-    logo: 'https://pixel.disco.nowtv.it/logo/skychb_202_lightnow/LOGO_CHANNEL_DARK/4000?language=it-IT&proposition=NOWOTT',
-    cat: 'cinema',
-    href: 'https://chevy.soyspace.cyou/proxy/wind/premium863/mono.m3u8',
-    preload: 'https://dlstreams.top/watch.php?id=863'
-  },
-  {
-    name: 'Sky cinema collection',
-    logo: 'https://pixel.disco.nowtv.it/logo/skychb_204_lightnow/LOGO_CHANNEL_DARK/4000?language=it-IT&proposition=NOWOTT',
-    cat: 'cinema',
-    href: 'https://chevy.soyspace.cyou/proxy/wind/premium859/mono.m3u8',
-    preload: 'https://dlstreams.top/watch.php?id=859'
-  },
-  {
-    name: 'Sky cinema action',
-    logo: 'https://pixel.disco.nowtv.it/logo/skychb_206_lightnow/LOGO_CHANNEL_DARK/4000?language=it-IT&proposition=NOWOTT',
-    cat: 'cinema',
-    href: 'https://chevy.soyspace.cyou/proxy/wind/premium861/mono.m3u8',
-    preload: 'https://dlstreams.top/watch.php?id=861'
-  },
-  {
-    name: 'Sky cinema family',
-    logo: '',
-    cat: 'cinema',
-    href: 'https://chevy.soyspace.cyou/proxy/wind/premium865/mono.m3u8',
-    preload: 'https://dlstreams.top/watch.php?id=865'
-  },
-  {
-    name: 'Sky cinema drama',
-    logo: 'https://pixel.disco.nowtv.it/logo/skychb_769_lightnow/LOGO_CHANNEL_DARK/4000?language=it-IT&proposition=NOWOTT',
-    cat: 'cinema',
-    href: 'https://chevy.soyspace.cyou/proxy/wind/premium867/mono.m3u8',
-    preload: 'https://dlstreams.top/watch.php?id=867'
-  },
-  {
-    name: 'Sky cinema comedy',
-    logo: 'https://pixel.disco.nowtv.it/logo/skychb_30_lightnow/LOGO_CHANNEL_DARK/4000?language=it-IT&proposition=NOWOTT',
-    cat: 'cinema',
-    href: 'https://chevy.soyspace.cyou/proxy/wind/premium862/mono.m3u8',
-    preload: 'https://dlstreams.top/player/stream-862.php'
-  },
-  {
-    name: 'Sky cinema romance',
-    logo: 'https://pixel.disco.nowtv.it/logo/skychb_231_lightnow/LOGO_CHANNEL_DARK/4000?language=it-IT&proposition=NOWOTT',
-    cat: 'cinema',
-    href: 'https://chevy.soyspace.cyou/proxy/wind/premium864/mono.m3u8',
-    preload: 'https://dlstreams.top/watch.php?id=864'
-  },
-  {
-    name: 'Sky uno',
-    logo: 'https://pixel.disco.nowtv.it/logo/skychb_477_lightnow/LOGO_CHANNEL_DARK/4000?language=it-IT&proposition=NOWOTT',
-    cat: 'intrattenimento',
-    href: 'https://chevy.soyspace.cyou/proxy/wind/premium881/mono.m3u8',
-    preload: 'https://dlstreams.top/player/stream-881.php'
-  },
- 
+  { name:'Sky cinema uno',        logo:'https://pixel.disco.nowtv.it/logo/skychb_202_lightnow/LOGO_CHANNEL_DARK/4000?language=it-IT&proposition=NOWOTT', cat:'cinema',          href:'https://chevy.soyspace.cyou/proxy/wind/premium860/mono.m3u8', preload: WORKER+'/stream/stream-860.php' },
+  { name:'Sky cinema uno +24',    logo:'https://pixel.disco.nowtv.it/logo/skychb_202_lightnow/LOGO_CHANNEL_DARK/4000?language=it-IT&proposition=NOWOTT', cat:'cinema',          href:'https://chevy.soyspace.cyou/proxy/wind/premium863/mono.m3u8', preload: WORKER+'/stream/stream-863.php' },
+  { name:'Sky cinema collection', logo:'https://pixel.disco.nowtv.it/logo/skychb_204_lightnow/LOGO_CHANNEL_DARK/4000?language=it-IT&proposition=NOWOTT', cat:'cinema',          href:'https://chevy.soyspace.cyou/proxy/wind/premium859/mono.m3u8', preload: WORKER+'/stream/stream-859.php' },
+  { name:'Sky cinema action',     logo:'https://pixel.disco.nowtv.it/logo/skychb_206_lightnow/LOGO_CHANNEL_DARK/4000?language=it-IT&proposition=NOWOTT', cat:'cinema',          href:'https://chevy.soyspace.cyou/proxy/wind/premium861/mono.m3u8', preload: WORKER+'/stream/stream-861.php' },
+  { name:'Sky cinema family',     logo:'',                                                                                                                cat:'cinema',          href:'https://chevy.soyspace.cyou/proxy/wind/premium865/mono.m3u8', preload: WORKER+'/stream/stream-865.php' },
+  { name:'Sky cinema drama',      logo:'https://pixel.disco.nowtv.it/logo/skychb_769_lightnow/LOGO_CHANNEL_DARK/4000?language=it-IT&proposition=NOWOTT', cat:'cinema',          href:'https://chevy.soyspace.cyou/proxy/wind/premium867/mono.m3u8', preload: WORKER+'/stream/stream-867.php' },
+  { name:'Sky cinema comedy',     logo:'https://pixel.disco.nowtv.it/logo/skychb_30_lightnow/LOGO_CHANNEL_DARK/4000?language=it-IT&proposition=NOWOTT',  cat:'cinema',          href:'https://chevy.soyspace.cyou/proxy/wind/premium862/mono.m3u8', preload: WORKER+'/stream/stream-862.php' },
+  { name:'Sky cinema romance',    logo:'https://pixel.disco.nowtv.it/logo/skychb_231_lightnow/LOGO_CHANNEL_DARK/4000?language=it-IT&proposition=NOWOTT', cat:'cinema',          href:'https://chevy.soyspace.cyou/proxy/wind/premium864/mono.m3u8', preload: WORKER+'/stream/stream-864.php' },
+  { name:'Sky uno',               logo:'https://pixel.disco.nowtv.it/logo/skychb_477_lightnow/LOGO_CHANNEL_DARK/4000?language=it-IT&proposition=NOWOTT', cat:'intrattenimento', href:'https://chevy.soyspace.cyou/proxy/wind/premium881/mono.m3u8', preload: WORKER+'/stream/stream-881.php' },
 ];
 
-// =============================================
-// RENDER & FILTER
-// =============================================
-const grid = document.getElementById('grid');
-const searchInput = document.getElementById('search-input');
-const filterBtns = document.querySelectorAll('.filter-btn');
-const countEl = document.getElementById('channel-count');
-const badgeEl = document.getElementById('channelCountBadge');
-const iframe = document.getElementById('preload-iframe');
-const overlay = document.getElementById('preload-overlay');
+// ── PRELOAD con fetch no-cors verso il worker ──
+const overlay    = document.getElementById('preload-overlay');
+const preloadBar = document.getElementById('preload-bar');
+const preloadSub = document.getElementById('preload-sub');
 
-let activeCat = 'all';
-let searchQuery = '';
+const PRELOAD_MS = 5000;
+const subMessages = [
+  'autenticazione sessione...',
+  'handshake con il server...',
+  'verifica token stream...',
+  'sessione stabilita...',
+  'avvio flusso dati...',
+];
+
+function doPreload(preloadUrl, hrefUrl) {
+  overlay.classList.add('active');
+  preloadBar.style.width = '0%';
+
+  // Fetch verso il worker — stesso dominio non bloccato
+  fetch(preloadUrl, {
+    method: 'GET',
+    mode: 'no-cors',
+    credentials: 'omit'
+  }).catch(() => {});
+
+  const step = 300;
+  const totalSteps = PRELOAD_MS / step;
+  let currentStep = 0;
+
+  const tick = setInterval(() => {
+    currentStep++;
+    const pct = Math.min((currentStep / totalSteps) * 100, 100);
+    preloadBar.style.width = pct + '%';
+    const msgIdx = Math.min(Math.floor((currentStep / totalSteps) * subMessages.length), subMessages.length - 1);
+    preloadSub.textContent = subMessages[msgIdx];
+
+    if (currentStep >= totalSteps) {
+      clearInterval(tick);
+      overlay.classList.remove('active');
+      window.location.href = hrefUrl;
+    }
+  }, step);
+}
+
+// ── RENDER ──
+const grid        = document.getElementById('grid');
+const searchInput = document.getElementById('search-input');
+const filterBtns  = document.querySelectorAll('.filter-btn');
+const countEl     = document.getElementById('channel-count');
+const badgeEl     = document.getElementById('channelCountBadge');
+let activeCat = 'all', searchQuery = '';
 
 function buildCard(ch) {
   const card = document.createElement('div');
   card.className = 'channel-card';
-  card.setAttribute('tabindex', '0');
-  card.setAttribute('role', 'button');
-  card.dataset.cat = ch.cat;
-  card.dataset.name = ch.name.toLowerCase();
-
+  card.setAttribute('tabindex','0');
+  card.setAttribute('role','button');
   card.innerHTML = `
     <span class="channel-cat-badge">${ch.cat}</span>
     <div class="channel-logo-wrapper">
       ${ch.logo
         ? `<img class="channel-logo" src="${ch.logo}" alt="${ch.name}" onerror="this.parentNode.innerHTML='<div class=\\'channel-placeholder\\'>${ch.name}</div>'">`
-        : `<div class="channel-placeholder">${ch.name}</div>`
-      }
+        : `<div class="channel-placeholder">${ch.name}</div>`}
     </div>
     <div class="play-overlay"><div class="play-icon"></div></div>
-    <div class="channel-info">
-      <div class="channel-name">${ch.name}</div>
-    </div>
+    <div class="channel-info"><div class="channel-name">${ch.name}</div></div>
   `;
-
-  // Click / keyboard handler — same logic as second file
   function activate(e) {
     e.preventDefault();
-    if (ch.preload) {
-      overlay.classList.add('active');
-      iframe.src = ch.preload;
-      setTimeout(() => {
-        iframe.src = '';
-        overlay.classList.remove('active');
-        window.location.href = ch.href;
-      }, 10000);
-    } else {
-      window.location.href = ch.href;
-    }
+    ch.preload ? doPreload(ch.preload, ch.href) : (window.location.href = ch.href);
   }
-
   card.addEventListener('click', activate);
-  card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') activate(e); });
-
+  card.addEventListener('keydown', e => { if(e.key==='Enter'||e.key===' ') activate(ch); });
   return card;
 }
 
 function renderChannels() {
   grid.innerHTML = '';
-  const filtered = channels.filter(ch => {
-    const catOk = activeCat === 'all' || ch.cat === activeCat;
-    const searchOk = ch.name.toLowerCase().includes(searchQuery);
-    return catOk && searchOk;
-  });
-
-  if (filtered.length === 0) {
-    grid.innerHTML = '<div class="error-state">NESSUN_CANALE_TROVATO — modifica i filtri di ricerca</div>';
-  } else {
-    filtered.forEach(ch => grid.appendChild(buildCard(ch)));
-  }
-
+  const filtered = channels.filter(ch =>
+    (activeCat === 'all' || ch.cat === activeCat) &&
+    ch.name.toLowerCase().includes(searchQuery)
+  );
+  filtered.length
+    ? filtered.forEach(ch => grid.appendChild(buildCard(ch)))
+    : (grid.innerHTML = '<div class="error-state">NESSUN_CANALE_TROVATO — modifica i filtri di ricerca</div>');
   countEl.textContent = filtered.length;
   badgeEl.textContent = `// ${filtered.length} canali`;
 }
 
-// Filter buttons
-filterBtns.forEach(btn => {
-  btn.addEventListener('click', () => {
-    filterBtns.forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    activeCat = btn.dataset.cat;
-    renderChannels();
-  });
-});
+filterBtns.forEach(btn => btn.addEventListener('click', () => {
+  filterBtns.forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  activeCat = btn.dataset.cat;
+  renderChannels();
+}));
 
-// Search
 searchInput.addEventListener('input', () => {
   searchQuery = searchInput.value.toLowerCase().trim();
   renderChannels();
 });
 
-// Initial render
 renderChannels();
 </script>
 </body>
