@@ -782,45 +782,43 @@ async function _playHLS(streamUrl, startTime = 0) {
   const handleKey = buildKeyHandler(videoEl, controls, cleanup);
   document.addEventListener('keydown', handleKey);
 
-  if (Hls.isSupported()) {
-    // ProxyLoader: wrappa ogni URL una sola volta tramite codetabs
-    class ProxyLoader extends Hls.DefaultConfig.loader {
-      load(ctx, cfg, cbs) {
-        const raw = ctx.url;
-        if (!raw.includes('codetabs.com') && !raw.includes('thingproxy') && !raw.includes('netlify')) {
+ if (Hls.isSupported()) {
+  class ProxyLoader extends Hls.DefaultConfig.loader {
+    load(ctx, cfg, cbs) {
+      const raw = ctx.url;
+      if (!raw.includes('netlify') && !raw.includes('codetabs') && !raw.includes('thingproxy')) {
+        // Usa Netlify per chiavi .key e segmenti .ts, codetabs per il manifest .m3u8
+        const isKey      = raw.includes('.key');
+        const isManifest = raw.includes('.m3u8');
+        if (isKey) {
+          ctx.url = `${NETLIFY_PROXY}${encodeURIComponent(raw)}`;
+        } else if (isManifest) {
           ctx.url = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(raw)}`;
+        } else {
+          // Segmenti .ts — prova prima Netlify
+          ctx.url = `${NETLIFY_PROXY}${encodeURIComponent(raw)}`;
         }
-        super.load(ctx, cfg, cbs);
       }
+      super.load(ctx, cfg, cbs);
     }
-
-    const hls = new Hls({ loader: ProxyLoader, maxBufferLength: 60, startLevel: -1 });
-    window._hlsInstance = hls;
-    hls.loadSource(streamUrl); // URL nativo – ProxyLoader lo gestisce
-    hls.attachMedia(videoEl);
-    hls.on(Hls.Events.MANIFEST_PARSED, () => {
-      if (startTime > 0) videoEl.currentTime = startTime;
-      videoEl.play().catch(() => {});
-      hidePlayOverlay();
-    });
-    hls.on(Hls.Events.ERROR, (_, data) => {
-      if (!data.fatal) return;
-      if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
-      else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
-      else showError("Errore HLS", "Impossibile riprodurre");
-    });
-  } else if (videoEl.canPlayType('application/vnd.apple.mpegurl')) {
-    videoEl.src = streamUrl;
-    videoEl.addEventListener('loadedmetadata', () => {
-      if (startTime > 0) videoEl.currentTime = startTime;
-      videoEl.play().catch(() => {});
-    }, { once: true });
-  } else {
-    showError("Errore", "HLS non supportato");
   }
 
-  controls.showFn();
-} // fine _playHLS
+  const hls = new Hls({ loader: ProxyLoader, maxBufferLength: 60, startLevel: -1 });
+  window._hlsInstance = hls;
+  hls.loadSource(streamUrl);
+  hls.attachMedia(videoEl);
+  hls.on(Hls.Events.MANIFEST_PARSED, () => {
+    if (startTime > 0) videoEl.currentTime = startTime;
+    videoEl.play().catch(() => {});
+    hidePlayOverlay();
+  });
+  hls.on(Hls.Events.ERROR, (_, data) => {
+    if (!data.fatal) return;
+    if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
+    else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
+    else showError("Errore HLS", "Impossibile riprodurre");
+  });
+}
 
 /* ==============================================================
    BARRA CONTROLLI
