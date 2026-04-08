@@ -793,20 +793,33 @@ async function _playHLS(streamUrl, startTime = 0) {
         return;
       }
 
-      // Chiavi AES (qualsiasi path che finisce con .key o contiene /storage/)
-      const isKey = raw.includes('.key') || raw.includes('/storage/') || ctx.type === 'key';
-
-      if (isKey) {
-        ctx.url = `https://thingproxy.freeboard.io/fetch/${raw}`;
-      } else {
-        ctx.url = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(raw)}`;
-      }
-
+      // Tutto passa per codetabs — ma intercettiamo le key dopo il manifest
+      ctx.url = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(raw)}`;
       super.load(ctx, cfg, cbs);
     }
   }
 
-  const hls = new Hls({ loader: ProxyLoader, maxBufferLength: 60, startLevel: -1 });
+  // Patch: intercetta la risposta del manifest e riscrive gli URI delle chiavi
+  class PatchedLoader extends ProxyLoader {
+    load(ctx, cfg, cbs) {
+      if (ctx.type === 'manifest' || ctx.type === 'level') {
+        const origOnSuccess = cbs.onSuccess;
+        cbs = { ...cbs, onSuccess: (response, stats, context, networkDetails) => {
+          // Riscrivi le righe #EXT-X-KEY sostituendo l'URI con thingproxy
+          if (typeof response.data === 'string') {
+            response.data = response.data.replace(
+              /URI="(https?:\/\/[^"]+)"/g,
+              (match, uri) => `URI="https://thingproxy.freeboard.io/fetch/${uri}"`
+            );
+          }
+          origOnSuccess(response, stats, context, networkDetails);
+        }};
+      }
+      super.load(ctx, cfg, cbs);
+    }
+  }
+
+  const hls = new Hls({ loader: PatchedLoader, maxBufferLength: 60, startLevel: -1 });
   window._hlsInstance = hls;
   hls.loadSource(streamUrl);
   hls.attachMedia(videoEl);
