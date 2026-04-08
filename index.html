@@ -786,18 +786,17 @@ async function _playHLS(streamUrl, startTime = 0) {
   class ProxyLoader extends Hls.DefaultConfig.loader {
     load(ctx, cfg, cbs) {
       const raw = ctx.url;
-      if (!raw.includes('netlify') && !raw.includes('codetabs') && !raw.includes('thingproxy')) {
-        // Usa Netlify per chiavi .key e segmenti .ts, codetabs per il manifest .m3u8
-        const isKey      = raw.includes('.key');
-        const isManifest = raw.includes('.m3u8');
-        if (isKey) {
-          ctx.url = `${NETLIFY_PROXY}${encodeURIComponent(raw)}`;
-        } else if (isManifest) {
-          ctx.url = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(raw)}`;
-        } else {
-          // Segmenti .ts — prova prima Netlify
-          ctx.url = `${NETLIFY_PROXY}${encodeURIComponent(raw)}`;
-        }
+      // Non rewrappare URL già proxati
+      if (raw.includes('codetabs.com') || raw.includes('thingproxy') || raw.includes('netlify')) {
+        super.load(ctx, cfg, cbs);
+        return;
+      }
+      if (raw.includes('.key')) {
+        // Chiavi AES: usa thingproxy (non fa redirect, supporta CORS per tutto)
+        ctx.url = `https://thingproxy.freeboard.io/fetch/${raw}`;
+      } else {
+        // Manifest .m3u8 e segmenti .ts: usa codetabs
+        ctx.url = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(raw)}`;
       }
       super.load(ctx, cfg, cbs);
     }
