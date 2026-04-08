@@ -765,75 +765,77 @@ async function _playHLS(streamUrl, startTime = 0) {
   videoEl.addEventListener('playing', () => hidePlayOverlay());
   videoEl.addEventListener('pause',   () => showPlayOverlay('paused'));
 
-  const cleanup = () => {
-    clearInterval(saveInterval);
-    clearInterval(controls.interval);
-    hidePlayOverlay();
-    if (videoEl.duration > 0 && currentItem)
-      saveToWatchHistory(currentItem, videoEl.currentTime, videoEl.duration, isMovie, currentSeason, currentEpisode);
-    if (window._hlsInstance) { window._hlsInstance.destroy(); window._hlsInstance = null; }
-    ['native-player','seek-info','player-controls','quality-menu','subtitle-menu'].forEach(id => {
-      const el = document.getElementById(id); if (el) el.remove();
-    });
-    document.removeEventListener('keydown', handleKey);
-    if (typeof SpatialNavigation !== 'undefined') SpatialNavigation.resume();
-  };
+const cleanup = () => {
+  clearInterval(saveInterval);
+  clearInterval(controls.interval);
+  hidePlayOverlay();
+  if (videoEl.duration > 0 && currentItem)
+    saveToWatchHistory(currentItem, videoEl.currentTime, videoEl.duration, isMovie, currentSeason, currentEpisode);
+  if (window._hlsInstance) { window._hlsInstance.destroy(); window._hlsInstance = null; }
+  if (blobUrl) { URL.revokeObjectURL(blobUrl); blobUrl = null; } // ← aggiungi questa riga
+  ['native-player','seek-info','player-controls','quality-menu','subtitle-menu'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.remove();
+  });
+  document.removeEventListener('keydown', handleKey);
+  if (typeof SpatialNavigation !== 'undefined') SpatialNavigation.resume();
+};
 
   const handleKey = buildKeyHandler(videoEl, controls, cleanup);
   document.addEventListener('keydown', handleKey);
 
  if (Hls.isSupported()) {
+  // Scarica il manifest, riscrive tutti gli URI, poi lo passa come blob
+  async function fetchAndPatchManifest(url) {
+    const proxied = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`;
+    const res = await fetch(proxied);
+    let text = await res.text();
+
+    // Riscrive URI delle chiavi AES → corsproxy.io (supporta tutto senza redirect)
+    text = text.replace(
+      /URI="(https?:\/\/[^"]+)"/g,
+      (_, uri) => `URI="https://corsproxy.io/?${encodeURIComponent(uri)}"`
+    );
+
+    // Riscrive URL delle audio track → codetabs
+    text = text.replace(
+      /^(https?:\/\/vixsrc\.to\/.+)$/gm,
+      line => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(line)}`
+    );
+
+    const blob = new Blob([text], { type: 'application/vnd.apple.mpegurl' });
+    return URL.createObjectURL(blob);
+  }
+
   class ProxyLoader extends Hls.DefaultConfig.loader {
     load(ctx, cfg, cbs) {
       const raw = ctx.url;
-
-      // Non rewrappare URL già proxati
-      if (raw.includes('codetabs.com') || raw.includes('thingproxy') || raw.includes('netlify') || raw.includes('corsproxy')) {
-        super.load(ctx, cfg, cbs);
-        return;
-      }
-
-      // Tutto passa per codetabs — ma intercettiamo le key dopo il manifest
-      ctx.url = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(raw)}`;
-      super.load(ctx, cfg, cbs);
-    }
-  }
-
-  // Patch: intercetta la risposta del manifest e riscrive gli URI delle chiavi
-  class PatchedLoader extends ProxyLoader {
-    load(ctx, cfg, cbs) {
-      if (ctx.type === 'manifest' || ctx.type === 'level') {
-        const origOnSuccess = cbs.onSuccess;
-        cbs = { ...cbs, onSuccess: (response, stats, context, networkDetails) => {
-          // Riscrivi le righe #EXT-X-KEY sostituendo l'URI con thingproxy
-          if (typeof response.data === 'string') {
-            response.data = response.data.replace(
-              /URI="(https?:\/\/[^"]+)"/g,
-              (match, uri) => `URI="https://thingproxy.freeboard.io/fetch/${uri}"`
-            );
-          }
-          origOnSuccess(response, stats, context, networkDetails);
-        }};
+      if (!raw.includes('codetabs.com') && !raw.includes('corsproxy') &&
+          !raw.includes('thingproxy') && !raw.includes('netlify') && !raw.startsWith('blob:')) {
+        ctx.url = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(raw)}`;
       }
       super.load(ctx, cfg, cbs);
     }
   }
 
-  const hls = new Hls({ loader: PatchedLoader, maxBufferLength: 60, startLevel: -1 });
-  window._hlsInstance = hls;
-  hls.loadSource(streamUrl);
-  hls.attachMedia(videoEl);
-  hls.on(Hls.Events.MANIFEST_PARSED, () => {
-    if (startTime > 0) videoEl.currentTime = startTime;
-    videoEl.play().catch(() => {});
-    hidePlayOverlay();
-  });
-  hls.on(Hls.Events.ERROR, (_, data) => {
-    if (!data.fatal) return;
-    if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
-    else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
-    else showError("Errore HLS", "Impossibile riprodurre");
-  });
+  let blobUrl = null;
+  fetchAndPatchManifest(streamUrl).then(patched => {
+    blobUrl = patched;
+    const hls = new Hls({ loader: ProxyLoader, maxBufferLength: 60, startLevel: -1 });
+    window._hlsInstance = hls;
+    hls.loadSource(patched);
+    hls.attachMedia(videoEl);
+    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      if (startTime > 0) videoEl.currentTime = startTime;
+      videoEl.play().catch(() => {});
+      hidePlayOverlay();
+    });
+    hls.on(Hls.Events.ERROR, (_, data) => {
+      if (!data.fatal) return;
+      if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
+      else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
+      else showError("Errore HLS", "Impossibile riprodurre");
+    });
+  }).catch(() => showError("Errore", "Impossibile caricare il manifest"));
 } else if (videoEl.canPlayType('application/vnd.apple.mpegurl')) {
     videoEl.src = streamUrl;
     videoEl.addEventListener('loadedmetadata', () => {
