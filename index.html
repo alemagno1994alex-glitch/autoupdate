@@ -786,18 +786,22 @@ async function _playHLS(streamUrl, startTime = 0) {
   class ProxyLoader extends Hls.DefaultConfig.loader {
     load(ctx, cfg, cbs) {
       const raw = ctx.url;
+
       // Non rewrappare URL già proxati
-      if (raw.includes('codetabs.com') || raw.includes('thingproxy') || raw.includes('netlify')) {
+      if (raw.includes('codetabs.com') || raw.includes('thingproxy') || raw.includes('netlify') || raw.includes('corsproxy')) {
         super.load(ctx, cfg, cbs);
         return;
       }
-      if (raw.includes('.key')) {
-        // Chiavi AES: usa thingproxy (non fa redirect, supporta CORS per tutto)
+
+      // Chiavi AES (qualsiasi path che finisce con .key o contiene /storage/)
+      const isKey = raw.includes('.key') || raw.includes('/storage/') || ctx.type === 'key';
+
+      if (isKey) {
         ctx.url = `https://thingproxy.freeboard.io/fetch/${raw}`;
       } else {
-        // Manifest .m3u8 e segmenti .ts: usa codetabs
         ctx.url = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(raw)}`;
       }
+
       super.load(ctx, cfg, cbs);
     }
   }
