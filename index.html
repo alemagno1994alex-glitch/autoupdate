@@ -534,14 +534,23 @@ const LIST_PROXIES = [
      (comportamento identico all'originale NeroZone funzionante)
      ============================================================== */
   async function getDirectStream(tmdbId, isMovie, season = null, episode = null) {
-    try {
-      let vixsrcUrl = `https://${VIXSRC_URL}/${isMovie ? 'movie' : 'tv'}/${tmdbId}`;
-      if (!isMovie && season !== null && episode !== null) {
-        vixsrcUrl += `/${season}/${episode}`;
-      }
+  let vixsrcUrl = `https://${VIXSRC_URL}/${isMovie ? 'movie' : 'tv'}/${tmdbId}`;
+  if (!isMovie && season !== null && episode !== null) {
+    vixsrcUrl += `/${season}/${episode}`;
+  }
 
-      const response = await fetch(applyCorsProxy(vixsrcUrl));
-      const html     = await response.text();
+  const STREAM_PROXIES = [
+    u => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+    u => `https://thingproxy.freeboard.io/fetch/${u}`,
+    u => `${NETLIFY_PROXY}${encodeURIComponent(u)}`,
+    u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+  ];
+
+  for (const makeProxy of STREAM_PROXIES) {
+    try {
+      const response = await fetch(makeProxy(vixsrcUrl), { signal: AbortSignal.timeout(10000) });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const html = await response.text();
 
       const paramsMatch = html.match(/window\.masterPlaylist[^:]+params:[^{]+({[^<]+?})/);
       if (!paramsMatch) throw new Error('params non trovati');
@@ -566,10 +575,13 @@ const LIST_PROXIES = [
       console.log('[Stream] OK:', m3u8Url.substring(0, 80));
       return { m3u8Url };
     } catch (err) {
-      console.error('[Stream] getDirectStream fallito:', err.message);
-      return null;
+      console.warn(`[Stream] proxy fallito:`, err.message);
     }
   }
+
+  console.error('[Stream] tutti i proxy hanno fallito');
+  return null;
+}
 
   /* ==============================================================
      CORS PROXY – applicato a TUTTE le risorse esterne (m3u8 + .ts)
