@@ -414,11 +414,6 @@ const LIST_PROXIES = [
   u => `${CORS2}${encodeURIComponent(u)}`
 ];
 
-  // ── Lista proxy per fetchAvailability ──────────────────────────
-const LIST_PROXIES = [
-  u => CORS.startsWith('localhost') ? `http://${CORS}${u}` : `https://${CORS}${u}`,
-  u => `https://${CORS2}${encodeURIComponent(u)}`
-];
 
   // ── TMDB endpoints per le liste home ───────────────────────────
   const TMDB_ENDPOINTS = {
