@@ -411,7 +411,9 @@ const VIXSRC_URL    = "vixsrc.to";
 
 const LIST_PROXIES = [
   u => `${NETLIFY_PROXY}${encodeURIComponent(u)}`,
-  u => `${CORS2}${encodeURIComponent(u)}`
+  u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+  u => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+  u => `https://thingproxy.freeboard.io/fetch/${u}`,
 ];
 
 
@@ -468,51 +470,57 @@ const LIST_PROXIES = [
      identico al comportamento originale funzionante di NeroZone.
      ============================================================== */
   async function fetchAvailableContent() {
-    const badge    = document.getElementById('api-badge');
-    const badgeTxt = document.getElementById('api-badge-text');
+  const badge    = document.getElementById('api-badge');
+  const badgeTxt = document.getElementById('api-badge-text');
 
-    const MOVIE_LIST = `https://${VIXSRC_URL}/api/list/movie/?lang=it`;
-    const TV_LIST    = `https://${VIXSRC_URL}/api/list/tv/?lang=it`;
+  const MOVIE_LIST = `https://${VIXSRC_URL}/api/list/movie/?lang=it`;
+  const TV_LIST    = `https://${VIXSRC_URL}/api/list/tv/?lang=it`;
 
-    let movies = [], tvShows = [];
+  let movies = [], tvShows = [];
 
-    // ── Film disponibili ─────────────────────────────────────
+  async function tryFetch(url) {
     for (const makeProxy of LIST_PROXIES) {
       try {
-        const res  = await fetch(makeProxy(MOVIE_LIST));
+        const res = await fetch(makeProxy(url), { signal: AbortSignal.timeout(8000) });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        movies = Array.isArray(data) ? data.map(i => ({ tmdb_id: i.tmdb_id ?? i.id })) : [];
-        console.log(`[NeroZone] ${movies.length} film disponibili`);
-        break;
-      } catch (e) { console.warn('[NeroZone] movie list:', e.message); }
+        const text = await res.text();
+        // Prova a parsare come JSON
+        const data = JSON.parse(text);
+        if (Array.isArray(data) && data.length > 0) return data;
+        throw new Error('Array vuoto o formato non valido');
+      } catch (e) {
+        console.warn(`[NeroZone] proxy fallito per ${url.split('/').pop()}:`, e.message);
+      }
     }
-
-    // ── Serie TV disponibili ──────────────────────────────────
-    for (const makeProxy of LIST_PROXIES) {
-      try {
-        const res  = await fetch(makeProxy(TV_LIST));
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        tvShows = Array.isArray(data) ? data.map(i => ({ tmdb_id: i.tmdb_id ?? i.id })) : [];
-        console.log(`[NeroZone] ${tvShows.length} serie TV disponibili`);
-        break;
-      } catch (e) { console.warn('[NeroZone] tv list:', e.message); }
-    }
-
-    availableContent = [...movies, ...tvShows];
-
-    if (availableContent.length > 0) {
-      badge.className      = 'api-status-badge ok';
-      badgeTxt.textContent = `✓ ${availableContent.length} titoli disponibili`;
-      setTimeout(() => badge.style.display = 'none', 3000);
-    } else {
-      // Fallback permissivo: se non riusciamo a caricare la lista, mostriamo tutto
-      badge.className      = 'api-status-badge error';
-      badgeTxt.textContent = '⚠ Lista non disponibile – mostro tutti i titoli';
-      console.warn('[NeroZone] availableContent vuoto: filtro disabilitato');
-    }
+    return null;
   }
+
+  const [moviesRaw, tvRaw] = await Promise.all([
+    tryFetch(MOVIE_LIST),
+    tryFetch(TV_LIST)
+  ]);
+
+  if (moviesRaw) {
+    movies = moviesRaw.map(i => ({ tmdb_id: i.tmdb_id ?? i.id }));
+    console.log(`[NeroZone] ${movies.length} film disponibili`);
+  }
+  if (tvRaw) {
+    tvShows = tvRaw.map(i => ({ tmdb_id: i.tmdb_id ?? i.id }));
+    console.log(`[NeroZone] ${tvShows.length} serie TV disponibili`);
+  }
+
+  availableContent = [...movies, ...tvShows];
+
+  if (availableContent.length > 0) {
+    badge.className      = 'api-status-badge ok';
+    badgeTxt.textContent = `✓ ${availableContent.length} titoli disponibili`;
+    setTimeout(() => badge.style.display = 'none', 3000);
+  } else {
+    badge.className      = 'api-status-badge error';
+    badgeTxt.textContent = '⚠ Lista non disponibile – mostro tutti i titoli';
+    console.warn('[NeroZone] availableContent vuoto: filtro disabilitato');
+  }
+}
 
   /* Helper: disponibilità.
      Se availableContent è vuoto (fetch fallito) → nessun filtro → true per tutto. */
@@ -572,6 +580,7 @@ function applyCorsProxy(url) {
   if (!url.startsWith('http')) {
     url = 'https://vixsrc.to' + (url.startsWith('/') ? '' : '/') + url;
   }
+  // Prova prima Netlify, poi corsproxy.io
   return `${NETLIFY_PROXY}${encodeURIComponent(url)}`;
 }
   /* ==============================================================
