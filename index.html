@@ -562,12 +562,18 @@
 
         // ─── Apre il player in player.html ──────────────────────────────────────────
         function startPlayer(type, id, season, episode) {
-            // Costruisce l'URL di player.html con tutti i parametri
-            let url = `player.html?type=${type}&id=${id}`;
-            if (type === 'tv') {
-                url += `&season=${season || 1}&episode=${episode || 1}`;
+            // Salva lo stato corrente: quale schermata ripristinare al ritorno
+            if (activeItemData) {
+                sessionStorage.setItem('returnState', JSON.stringify({
+                    view: 'details',
+                    id: activeItemData.id,
+                    type: activeItemData.media_type,
+                    detailsScrollTop: document.getElementById('view-details').scrollTop
+                }));
             }
-            // Naviga alla pagina player (stessa scheda)
+
+            let url = `player.html?type=${type}&id=${id}`;
+            if (type === 'tv') url += `&season=${season || 1}&episode=${episode || 1}`;
             window.location.href = url;
         }
 
@@ -970,8 +976,30 @@
             header.insertBefore(logoContainer, header.firstChild);
         }
 
+        // ─── Ripristina la schermata al ritorno dal player ───────────────────────────
+        async function restoreStateIfNeeded() {
+            const raw = sessionStorage.getItem('returnState');
+            if (!raw) return false;
+            sessionStorage.removeItem('returnState');
+            try {
+                const state = JSON.parse(raw);
+                if (state.view === 'details' && state.id && state.type) {
+                    await openDetails(state.id, state.type);
+                    // Ripristina lo scroll della schermata dettagli
+                    setTimeout(() => {
+                        document.getElementById('view-details').scrollTop = state.detailsScrollTop || 0;
+                    }, 150);
+                    return true;
+                }
+            } catch(e) {}
+            return false;
+        }
+
         createLogo();
-        initCatalog();
+        restoreStateIfNeeded().then(restored => {
+            if (!restored) initCatalog();
+            else initCatalog(); // carica il catalogo in background comunque
+        });
     </script>
 
 </body>
