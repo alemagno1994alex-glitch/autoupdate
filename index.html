@@ -410,10 +410,10 @@ const CORS2         = "https://api.allorigins.win/raw?url=";
 const VIXSRC_URL    = "vixsrc.to";
 
 const LIST_PROXIES = [
-  u => `${NETLIFY_PROXY}${encodeURIComponent(u)}`,
-  u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
   u => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
   u => `https://thingproxy.freeboard.io/fetch/${u}`,
+  u => `${NETLIFY_PROXY}${encodeURIComponent(u)}`,
+  u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
 ];
 
 
