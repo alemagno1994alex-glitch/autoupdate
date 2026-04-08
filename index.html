@@ -741,17 +741,18 @@ function applyCorsProxy(url) {
     setTimeout(() => document.querySelector('.back-btn').focus(), 100);
   }
 
-  async function prepareMovieStream(id) {
-    const streamData = await getDirectStream(id, true);
-    if (streamData && streamData.m3u8Url) {
-      currentStreamUrl = applyCorsProxy(streamData.m3u8Url);
-      const playBtn    = document.getElementById("play-fullscreen-btn");
-      playBtn.onclick  = () => playInFullscreen(currentStreamUrl);
-      playBtn.focus();
-    } else {
-      showError("Errore", "Impossibile caricare lo stream del film");
-    }
+async function prepareMovieStream(id) {
+  const streamData = await getDirectStream(id, true);
+  if (streamData && streamData.m3u8Url) {
+    // NON applicare applyCorsProxy qui — lo fa ProxyLoader internamente
+    currentStreamUrl = streamData.m3u8Url;
+    const playBtn = document.getElementById("play-fullscreen-btn");
+    playBtn.onclick = () => playInFullscreen(currentStreamUrl);
+    playBtn.focus();
+  } else {
+    showError("Errore", "Impossibile caricare lo stream del film");
   }
+}
 
   async function loadTVSeasons(tvId) {
     const seasons  = await fetchTVSeasons(tvId);
@@ -789,7 +790,7 @@ function applyCorsProxy(url) {
 
         const streamData = await getDirectStream(tvId, false, seasonNum, ep.episode_number);
         if (streamData && streamData.m3u8Url) {
-          const streamUrl   = applyCorsProxy(streamData.m3u8Url);
+          const streamUrl = streamData.m3u8Url;
           const savedProg   = getItemProgress(currentItem.id, false, seasonNum, ep.episode_number);
           const startTime   = savedProg?.progress > 0 ? savedProg.progress : 0;
           await playInFullscreen(streamUrl, startTime);
@@ -880,43 +881,39 @@ function applyCorsProxy(url) {
     const handleKey = buildKeyHandler(videoEl, controls, cleanup);
     document.addEventListener('keydown', handleKey);
 
-   if (Hls.isSupported()) {
-class ProxyLoader extends Hls.DefaultConfig.loader {
-  load(ctx, cfg, cbs) {
-    if (ctx.type !== 'fragment') {
-      ctx.url = applyCorsProxy(ctx.url);
-    }
-    super.load(ctx, cfg, cbs);
-  }
-}
-      const hls = new Hls({ loader: ProxyLoader, maxBufferLength: 60, startLevel: -1 });
-      window._hlsInstance = hls;
-      hls.loadSource(streamUrl);
-      hls.attachMedia(videoEl);
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        if (startTime > 0) videoEl.currentTime = startTime;
-        videoEl.play().catch(() => {});
-        hidePlayOverlay();
-      });
-      hls.on(Hls.Events.ERROR, (_, data) => {
-        if (!data.fatal) return;
-        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
-        else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
-        else showError("Errore HLS", "Impossibile riprodurre");
-      });
-    } else if (videoEl.canPlayType('application/vnd.apple.mpegurl')) {
-      videoEl.src = streamUrl;
-      videoEl.addEventListener('loadedmetadata', () => {
-        if (startTime > 0) videoEl.currentTime = startTime;
-        videoEl.play().catch(() => {});
-      }, { once: true });
-    } else {
-      showError("Errore", "HLS non supportato");
-    }
+  if (Hls.isSupported()) {
+  const BEST_PROXY = u => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`;
+  const FALLBACK_PROXY = u => `https://thingproxy.freeboard.io/fetch/${u}`;
 
-    controls.showFn();
+  class ProxyLoader extends Hls.DefaultConfig.loader {
+    load(ctx, cfg, cbs) {
+      const raw = ctx.url;
+      // Evita doppio wrapping: se già proxato, non rewrappare
+      if (!raw.includes('codetabs.com') && !raw.includes('thingproxy') && !raw.includes('netlify')) {
+        ctx.url = BEST_PROXY(raw);
+      }
+      super.load(ctx, cfg, cbs);
+    }
   }
 
+  const hls = new Hls({ loader: ProxyLoader, maxBufferLength: 60, startLevel: -1 });
+  window._hlsInstance = hls;
+  // Passa l'URL originale (non proxato) — il ProxyLoader lo gestisce internamente
+  hls.loadSource(streamUrl.includes('codetabs.com') || streamUrl.includes('thingproxy') || streamUrl.includes('netlify')
+    ? decodeURIComponent(streamUrl.split('quest=')[1] || streamUrl.split('/fetch/')[1] || streamUrl)
+    : streamUrl);
+  hls.attachMedia(videoEl);
+  hls.on(Hls.Events.MANIFEST_PARSED, () => {
+    if (startTime > 0) videoEl.currentTime = startTime;
+    videoEl.play().catch(() => {});
+    hidePlayOverlay();
+  });
+  hls.on(Hls.Events.ERROR, (_, data) => {
+    if (!data.fatal) return;
+    if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
+    else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
+    else showError("Errore HLS", "Impossibile riprodurre");
+  });
   /* ==============================================================
      HELPER – barra controlli
      ============================================================== */
