@@ -785,12 +785,39 @@ async function _playHLS(streamUrl, startTime = 0) {
   const handleKey = buildKeyHandler(videoEl, controls, cleanup);
   document.addEventListener('keydown', handleKey);
 
-  const proxiedUrl = `${CF_PROXY}?url=${encodeURIComponent(streamUrl)}`;
+// Aggiungi questa funzione subito prima di _playHLS
+async function fetchViaWorker(targetUrl) {
+  const res = await fetch(`${CF_PROXY}?url=${encodeURIComponent(targetUrl)}`, {
+    credentials: 'include', // manda i cookie al worker
+  });
+  return res;
+}
 
-  if (Hls.isSupported()) {
-    const hls = new Hls({ maxBufferLength: 60, startLevel: -1 });
-    window._hlsInstance = hls;
-    hls.loadSource(proxiedUrl);
+// In _playHLS sostituisci solo la parte HLS così:
+const proxiedUrl = `${CF_PROXY}?url=${encodeURIComponent(streamUrl)}`;
+
+if (Hls.isSupported()) {
+  // Loader custom che passa credentials
+  class CookieLoader extends Hls.DefaultConfig.loader {
+    load(ctx, cfg, cbs) {
+      // Se l'URL non è già del worker, non toccare
+      // HLS.js userà l'URL già proxato dal manifest riscritto
+      super.load(ctx, cfg, cbs);
+    }
+  }
+
+  const hls = new Hls({ 
+    maxBufferLength: 60, 
+    startLevel: -1,
+    xhrSetup: (xhr, url) => {
+      xhr.withCredentials = false; // il worker gestisce i cookie
+    }
+  });
+  window._hlsInstance = hls;
+  hls.loadSource(proxiedUrl);
+  // ... resto invariato
+
+
     hls.attachMedia(videoEl);
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
       if (startTime > 0) videoEl.currentTime = startTime;
