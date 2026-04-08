@@ -818,7 +818,18 @@ async function _playHLS(streamUrl, startTime = 0) {
     else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
     else showError("Errore HLS", "Impossibile riprodurre");
   });
-}
+} else if (videoEl.canPlayType('application/vnd.apple.mpegurl')) {
+    videoEl.src = streamUrl;
+    videoEl.addEventListener('loadedmetadata', () => {
+      if (startTime > 0) videoEl.currentTime = startTime;
+      videoEl.play().catch(() => {});
+    }, { once: true });
+  } else {
+    showError("Errore", "HLS non supportato");
+  }
+
+  controls.showFn();
+} // fine _playHLS
 
 /* ==============================================================
    BARRA CONTROLLI
