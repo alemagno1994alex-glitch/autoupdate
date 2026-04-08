@@ -360,6 +360,8 @@ const LIST_PROXIES = [
   u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
 ];
 
+const CF_PROXY = 'https://vixsrc.scoopskiski.workers.dev';  
+
 const TMDB_ENDPOINTS = {
   trending:      "trending/all/week",
   nowPlaying:    "movie/now_playing",
@@ -722,142 +724,6 @@ async function playInFullscreen(streamUrl, startTime = 0) {
 }
 
 async function _playHLS(streamUrl, startTime = 0) {
-  const mediaType = currentItem?.media_type || (currentItem?.title ? "movie" : "tv");
-  const isMovie   = mediaType === "movie";
-  let currentSeason = null, currentEpisode = null;
-
-  if (!isMovie) {
-    const seasonSelect  = document.getElementById("season-select");
-    const activeEpisode = document.querySelector(".episode-item.active");
-    if (seasonSelect) currentSeason = parseInt(seasonSelect.value);
-    if (activeEpisode) {
-      const m = activeEpisode.querySelector(".episode-number")?.textContent.match(/\d+/);
-      if (m) currentEpisode = parseInt(m[0]);
-    }
-  }
-
-  showPlayOverlay('loading');
-  ['native-player','seek-info','player-controls','quality-menu','subtitle-menu'].forEach(id => {
-    const el = document.getElementById(id); if (el) el.remove();
-  });
-  if (window._hlsInstance) { window._hlsInstance.destroy(); window._hlsInstance = null; }
-
-  const videoEl = document.createElement('video');
-  videoEl.id = 'native-player'; videoEl.controls = false; videoEl.autoplay = true;
-  videoEl.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:9999;background:#000;';
-  document.body.appendChild(videoEl);
-  if (typeof SpatialNavigation !== 'undefined') SpatialNavigation.pause();
-
-  const controls = buildControlsBar(videoEl, isMovie, currentSeason, currentEpisode);
-  document.body.appendChild(controls.el);
-
-  const saveInterval = setInterval(() => {
-    if (!videoEl.paused && videoEl.duration > 0 && currentItem) {
-      saveToWatchHistory(currentItem, videoEl.currentTime, videoEl.duration, isMovie, currentSeason, currentEpisode);
-    }
-  }, 15000);
-
-  videoEl.addEventListener('pause', () => {
-    if (videoEl.duration > 0 && currentItem)
-      saveToWatchHistory(currentItem, videoEl.currentTime, videoEl.duration, isMovie, currentSeason, currentEpisode);
-  });
-  videoEl.addEventListener('waiting', () => showPlayOverlay('loading'));
-  videoEl.addEventListener('playing', () => hidePlayOverlay());
-  videoEl.addEventListener('pause',   () => showPlayOverlay('paused'));
-
-const cleanup = () => {
-  clearInterval(saveInterval);
-  clearInterval(controls.interval);
-  hidePlayOverlay();
-  if (videoEl.duration > 0 && currentItem)
-    saveToWatchHistory(currentItem, videoEl.currentTime, videoEl.duration, isMovie, currentSeason, currentEpisode);
-  if (window._hlsInstance) { window._hlsInstance.destroy(); window._hlsInstance = null; }
-  if (blobUrl) { URL.revokeObjectURL(blobUrl); blobUrl = null; } // ← aggiungi questa riga
-  ['native-player','seek-info','player-controls','quality-menu','subtitle-menu'].forEach(id => {
-    const el = document.getElementById(id); if (el) el.remove();
-  });
-  document.removeEventListener('keydown', handleKey);
-  if (typeof SpatialNavigation !== 'undefined') SpatialNavigation.resume();
-};
-
-  const handleKey = buildKeyHandler(videoEl, controls, cleanup);
-  document.addEventListener('keydown', handleKey);
-
- if (Hls.isSupported()) {
-  // Scarica il manifest, riscrive tutti gli URI, poi lo passa come blob
-async function fetchAndPatchManifest(url) {
-  const proxied = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`;
-  const res = await fetch(proxied);
-  let text = await res.text();
-
-  // 1. Chiavi AES → usa corsproxy.io (codetabs fa redirect che rompe CORS)
-  text = text.replace(
-    /URI="(https?:\/\/[^"]+)"/g,
-    (_, uri) => `URI="https://corsproxy.io/?${encodeURIComponent(uri)}"`
-  );
-
-  // 2. Audio track vixsrc → usa thingproxy (corsproxy.io dà 403 su questi URL)
-  text = text.replace(
-    /^(https?:\/\/vixsrc\.to\/.+type=audio.*)$/gm,
-    line => `https://thingproxy.freeboard.io/fetch/${line}`
-  );
-
-  // 3. Tutti gli altri URL assoluti vixsrc → codetabs
-  text = text.replace(
-    /^(https?:\/\/vixsrc\.to\/(?!.+type=audio).+)$/gm,
-    line => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(line)}`
-  );
-
-  const blob = new Blob([text], { type: 'application/vnd.apple.mpegurl' });
-  return URL.createObjectURL(blob);
-}
-
-class ProxyLoader extends Hls.DefaultConfig.loader {
-  load(ctx, cfg, cbs) {
-    const raw = ctx.url;
-    const alreadyProxied = raw.includes('codetabs.com') ||
-                           raw.includes('corsproxy') ||
-                           raw.includes('thingproxy') ||
-                           raw.includes('netlify') ||
-                           raw.startsWith('blob:');
-    if (!alreadyProxied) {
-      ctx.url = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(raw)}`;
-    }
-    super.load(ctx, cfg, cbs);
-  }
-}
-
-  let blobUrl = null;
-  fetchAndPatchManifest(streamUrl).then(patched => {
-    blobUrl = patched;
-    const hls = new Hls({ loader: ProxyLoader, maxBufferLength: 60, startLevel: -1 });
-    window._hlsInstance = hls;
-    hls.loadSource(patched);
-    hls.attachMedia(videoEl);
-    hls.on(Hls.Events.MANIFEST_PARSED, () => {
-      if (startTime > 0) videoEl.currentTime = startTime;
-      videoEl.play().catch(() => {});
-      hidePlayOverlay();
-    });
-    hls.on(Hls.Events.ERROR, (_, data) => {
-      if (!data.fatal) return;
-      if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
-      else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
-      else showError("Errore HLS", "Impossibile riprodurre");
-    });
-  }).catch(() => showError("Errore", "Impossibile caricare il manifest"));
-} else if (videoEl.canPlayType('application/vnd.apple.mpegurl')) {
-    videoEl.src = streamUrl;
-    videoEl.addEventListener('loadedmetadata', () => {
-      if (startTime > 0) videoEl.currentTime = startTime;
-      videoEl.play().catch(() => {});
-    }, { once: true });
-  } else {
-    showError("Errore", "HLS non supportato");
-  }
-
-  controls.showFn();
-} // fine _playHLS
 
 /* ==============================================================
    BARRA CONTROLLI
