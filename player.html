@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>Caricamento...</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #050505;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: sans-serif;
+        }
+        .spinner {
+            width: 60px; height: 60px;
+            border: 4px solid rgba(255,255,255,0.1);
+            border-top-color: hsl(194, 92%, 47%);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="spinner"></div>
+    <script>
+        const params  = new URLSearchParams(window.location.search);
+        const type    = params.get('type');
+        const id      = params.get('id');
+        const season  = params.get('season')  || '1';
+        const episode = params.get('episode') || '1';
+
+        if (!type || !id) {
+            window.location.href = 'index.html';
+        } else {
+            let url = `https://vixsrc.to/${type}/${id}`;
+            if (type === 'tv') url += `/${season}/${episode}`;
+            url += `/?primaryColor=e50914&lang=it&autoplay=1&sottotitoli=off&quality=1080p`;
+            window.location.replace(url);
+        }
+    </script>
+</body>
+</html>
