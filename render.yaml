@@ -1,9 +1,0 @@
-services:
-  - type: web
-    name: proxy-online
-    env: node
-    region: frankfurt
-    plan: free
-    buildCommand: "npm install"
-    startCommand: "npm start"
-    autoDeploy: true
