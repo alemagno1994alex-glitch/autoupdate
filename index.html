@@ -1323,17 +1323,18 @@
 if ([13, 23, 66].includes(key) || e.key === 'Enter') {
     const dropdown = document.getElementById('smart-suggestions');
     if (dropdown) {
-        const items = Array.from(dropdown.querySelectorAll('.sg-item'));
-        if (sgFocusIndex >= 0 && items[sgFocusIndex]) {
+        if (sgFocusIndex >= 0 && sgActions[sgFocusIndex]) {
             e.preventDefault();
             e.stopImmediatePropagation();
-            document.getElementById('search-input').blur();
+            const action = sgActions[sgFocusIndex];
+            const label = dropdown.querySelectorAll('.sg-item')[sgFocusIndex]
+                ?.querySelector('.sg-label')?.textContent || '';
             removeSuggestions();
-            items[sgFocusIndex].dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+            document.getElementById('search-input').value = label;
+            setTimeout(() => action(), 50);
         }
         return;
     }
-
                 if (activeDialog) {
                     const focusedEl = activeDialog.querySelector('.tv-focus') || document.activeElement;
                     if (focusedEl && activeDialog.contains(focusedEl)) {
@@ -1806,7 +1807,8 @@ if ([13, 23, 66].includes(key) || e.key === 'Enter') {
 
         // ── Suggerimenti dropdown ────────────────────────────────────────
         let debounceTimer;
-        let sgFocusIndex = -1;
+      let sgFocusIndex = -1;
+let sgActions = []; // ← AGGIUNTO
 
 function removeSuggestions() {
     const old = document.getElementById('smart-suggestions');
@@ -1818,6 +1820,7 @@ function showSuggestions(items) {
     removeSuggestions();
     if (!items || items.length === 0) return;
     document.getElementById('search-input').setAttribute('readonly', 'true');
+    sgActions = items.map(i => i.action); // ← AGGIUNTO
     const box = document.createElement('div');
     box.id = 'smart-suggestions';
     items.forEach(item => {
