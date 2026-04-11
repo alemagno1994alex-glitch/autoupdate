@@ -1808,18 +1808,19 @@ if ([13, 23, 66].includes(key) || e.key === 'Enter') {
         let debounceTimer;
         let sgFocusIndex = -1;
 
-        function removeSuggestions() {
-            const old = document.getElementById('smart-suggestions');
-            if (old) old.remove();
-            sgFocusIndex = -1;
-        }
-
-        function showSuggestions(items) {
-            removeSuggestions();
-            if (!items || items.length === 0) return;
-            const box = document.createElement('div');
-            box.id = 'smart-suggestions';
-            items.forEach(item => {
+function removeSuggestions() {
+    const old = document.getElementById('smart-suggestions');
+    if (old) old.remove();
+    document.getElementById('search-input').removeAttribute('readonly');
+    sgFocusIndex = -1;
+}
+function showSuggestions(items) {
+    removeSuggestions();
+    if (!items || items.length === 0) return;
+    document.getElementById('search-input').setAttribute('readonly', 'true');
+    const box = document.createElement('div');
+    box.id = 'smart-suggestions';
+    items.forEach(item => {
                 const el = document.createElement('div');
                 el.className = 'sg-item';
                 let iconHtml = '';
