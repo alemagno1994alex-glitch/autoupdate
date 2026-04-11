@@ -52,7 +52,7 @@
             let url = `https://vixsrc.to/${type}/${id}`;
             if (type === 'tv') url += `/${season}/${episode}`;
             const startAt = params.get('startAt');
-            url += `/?primaryColor=e50914&lang=it&autoplay=1&sottotitoli=off&quality=360p`;
+            url += `/?primaryColor=e50914&lang=it&autoplay=1&sottotitoli=on`;
             if (startAt && parseInt(startAt) > 10) url += `&startAt=${startAt}`;
             window.location.replace(url);
         }
