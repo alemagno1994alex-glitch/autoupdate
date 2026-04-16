@@ -1,0 +1,11 @@
+{
+  "dependencies": {
+    "commander": "^14.0.3",
+    "express": "^5.2.1",
+    "node-cache": "^5.1.2",
+    "node-fetch": "^3.3.2"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
