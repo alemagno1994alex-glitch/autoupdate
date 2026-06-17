@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Player</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.11.2/controls.min.css" />
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background-color: black;
+      touch-action: pan-y;
+      overflow: hidden;
+    }
+    #video-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+    video {
+      width: 100%;
+      height: 100%;
+    }
+    #overlay {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background: rgba(0,0,0,0.7);
+      color: white;
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-size: 16px;
+      display: none;
+      z-index: 1000;
+      pointer-events: none;
+    }
+
+    /* ===== EPG OVERLAY - SOLO IN FULLSCREEN ===== */
+    #epg-info {
+      position: absolute;
+      bottom: 100px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 90%;
+      max-width: 600px;
+      background: rgba(0, 0, 0, 0.92);
+      backdrop-filter: blur(12px);
+      color: white;
+      padding: 18px 22px;
+      border-radius: 12px;
+      border-left: 4px solid #00b4ff;
+      display: none;
+      z-index: 999;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.9);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      pointer-events: none;
+    }
+
+    #epg-info.show {
+      display: block;
+      animation: epgSlideUp 0.3s ease;
+    }
+
+    @keyframes epgSlideUp {
+      from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+    }
+
+    #epg-info .epg-title {
+      font-size: 17px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      color: #00b4ff;
+    }
+
+    #epg-info .epg-time {
+      font-size: 13px;
+      color: #f59e0b;
+      margin-bottom: 8px;
+      font-weight: 600;
+    }
+
+    #epg-info .epg-desc {
+      font-size: 14px;
+      line-height: 1.6;
+      color: #ddeeff;
+      opacity: 0.9;
+    }
+
+    #epg-info .epg-now-badge {
+      display: inline-block;
+      background: #ff4466;
+      color: white;
+      font-size: 10px;
+      font-weight: 800;
+      padding: 2px 10px;
+      border-radius: 10px;
+      letter-spacing: 0.5px;
+      margin-right: 10px;
+      text-transform: uppercase;
+      animation: liveblink 2s infinite;
+    }
+
+    @keyframes liveblink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* Pausa indicator */
+    #pause-indicator {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 60px;
+      color: white;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 100;
+      transition: opacity 0.3s;
+    }
+
+    #pause-indicator.show {
+      opacity: 0.8;
+    }
+
+    /* Fullscreen hint */
+    #fullscreen-hint {
+      position: absolute;
+      bottom: 50%;
+      left: 50%;
+      transform: translate(-50%, 50%);
+      color: rgba(255,255,255,0.3);
+      font-size: 14px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      text-align: center;
+      z-index: 50;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 1s;
+    }
+    #fullscreen-hint.show {
+      opacity: 1;
+    }
+    #fullscreen-hint i {
+      display: block;
+      font-size: 40px;
+      margin-bottom: 10px;
+    }
+
+    /* Mobile */
+    @media (max-width: 768px) {
+      #epg-info {
+        bottom: 80px;
+        width: 95%;
+        padding: 14px 16px;
+      }
+      
+      #epg-info .epg-title {
+        font-size: 14px;
+      }
+      
+      #epg-info .epg-desc {
+        font-size: 12px;
+      }
+      
+      #pause-indicator {
+        font-size: 40px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="video-container">
+    <video id="video" autoplay poster="https://upload.wikimedia.org/wikipedia/commons/7/76/Media_Player_Classic_logo.png" tabindex="0"></video>
+    <div id="overlay"></div>
+    
+    <!-- Fullscreen hint -->
+    <div id="fullscreen-hint" class="show">
+      <i>⛶</i>
+      Tocca due volte o premi F per fullscreen
+    </div>
+    
+    <!-- EPG Info - appare SOLO in fullscreen e in pausa -->
+    <div id="epg-info">
+      <div class="epg-title" id="epgTitle">Programma</div>
+      <div class="epg-time" id="epgTime">Orario</div>
+      <div class="epg-desc" id="epgDesc">Descrizione...</div>
+    </div>
+    
+    <!-- Pausa indicator -->
+    <div id="pause-indicator">⏸</div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.11.2/shaka-player.compiled.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.11.2/shaka-player.ui.min.js"></script>
+  <script>
+    shaka.polyfill.installAll();
+
+    const video = document.getElementById('video');
+    const container = document.getElementById('video-container');
+    const overlay = document.getElementById('overlay');
+    const fullscreenHint = document.getElementById('fullscreen-hint');
+    let player;
+    let epgData = null;
+    let epgVisible = false;
+    let isFullscreen = false;
+    let hintTimeout = null;
+
+    // ===== UTILITY =====
+    function formatTime(seconds) {
+      if (!seconds || isNaN(seconds)) return '--:--';
+      const min = Math.floor(seconds / 60);
+      const sec = Math.floor(seconds % 60);
+      return `${min}:${sec.toString().padStart(2, '0')}`;
+    }
+
+    function formatLiveTime(date) {
+      if (!date) return '--:--';
+      const hours = date.getHours().toString().padStart(2, '0');
+      const mins = date.getMinutes().toString().padStart(2, '0');
+      return `${hours}:${mins}`;
+    }
+
+    function getLiveTime() {
+      if (!player || !player.isLive()) return null;
+      try {
+        const now = new Date();
+        const liveEdge = player.seekRange().end;
+        const behind = liveEdge - video.currentTime;
+        const liveTime = new Date(now.getTime() - behind * 1000);
+        return liveTime;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    // ===== OVERLAY =====
+    function showOverlay(text, isLive = false) {
+      if (isLive && player && player.isLive()) {
+        const liveTime = getLiveTime();
+        if (liveTime) {
+          const behind = player.seekRange().end - video.currentTime;
+          const timeStr = formatLiveTime(liveTime);
+          overlay.textContent = `🔴 LIVE • ${timeStr} • ${formatTime(behind)} indietro`;
+        } else {
+          overlay.textContent = text;
+        }
+      } else {
+        overlay.textContent = text;
+      }
+      overlay.style.display = 'block';
+      clearTimeout(overlay._timeout);
+      overlay._timeout = setTimeout(() => overlay.style.display = 'none', 3000);
+    }
+
+    // ===== EPG FUNCTIONS =====
+    function showEPG(program) {
+      if (!isFullscreen) {
+        console.log('EPG: non in fullscreen, non mostro');
+        return;
+      }
+      
+      const epgInfo = document.getElementById('epg-info');
+      const epgTitle = document.getElementById('epgTitle');
+      const epgTime = document.getElementById('epgTime');
+      const epgDesc = document.getElementById('epgDesc');
+      
+      if (!program) {
+        hideEPG();
+        return;
+      }
+      
+      const startTime = program.start ? formatTime(program.start) : '--:--';
+      const endTime = program.stop ? formatTime(program.stop) : '--:--';
+      
+      epgTitle.innerHTML = `<span class="epg-now-badge">● IN ONDA</span> ${program.title || 'Programma'}`;
+      epgTime.textContent = `${startTime} - ${endTime}`;
+      epgDesc.textContent = program.desc || 'Descrizione non disponibile';
+      
+      epgInfo.classList.add('show');
+      epgVisible = true;
+    }
+
+    function hideEPG() {
+      document.getElementById('epg-info').classList.remove('show');
+      epgVisible = false;
+    }
+
+    function showPauseIndicator() {
+      const indicator = document.getElementById('pause-indicator');
+      indicator.classList.add('show');
+      clearTimeout(indicator._timeout);
+      indicator._timeout = setTimeout(() => {
+        indicator.classList.remove('show');
+      }, 1500);
+    }
+
+    function receiveEPG(programData) {
+      epgData = programData;
+      if (isFullscreen && video.paused && epgData && epgData.current) {
+        showEPG(epgData.current);
+      }
+    }
+    window.receiveEPG = receiveEPG;
+
+    // ===== FULLSCREEN =====
+    function checkFullscreen() {
+      isFullscreen = document.fullscreenElement !== null || 
+                     document.webkitFullscreenElement !== null ||
+                     document.mozFullScreenElement !== null ||
+                     document.msFullscreenElement !== null;
+      
+      // Nascondi hint quando in fullscreen
+      if (isFullscreen) {
+        fullscreenHint.classList.remove('show');
+      } else {
+        // Mostra hint quando si esce dal fullscreen
+        fullscreenHint.classList.add('show');
+        clearTimeout(hintTimeout);
+        hintTimeout = setTimeout(() => {
+          fullscreenHint.classList.remove('show');
+        }, 5000);
+        // Nascondi EPG
+        hideEPG();
+      }
+    }
+
+    function toggleFullscreen() {
+      const el = document.getElementById('video-container');
+      if (!document.fullscreenElement && !document.webkitFullscreenElement && 
+          !document.mozFullScreenElement && !document.msFullscreenElement) {
+        if (el.requestFullscreen) {
+          el.requestFullscreen();
+        } else if (el.webkitRequestFullscreen) {
+          el.webkitRequestFullscreen();
+        } else if (el.mozRequestFullScreen) {
+          el.mozRequestFullScreen();
+        } else if (el.msRequestFullscreen) {
+          el.msRequestFullscreen();
+        }
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+          document.webkitExitFullscreen();
+        } else if (document.mozCancelFullScreen) {
+          document.mozCancelFullScreen();
+        } else if (document.msExitFullscreen) {
+          document.msExitFullscreen();
+        }
+      }
+    }
+
+    // ===== TOUCH CONTROLS =====
+    let lastTap = 0;
+    container.addEventListener('touchstart', (e) => {
+      const currentTime = new Date().getTime();
+      const tapLength = currentTime - lastTap;
+      
+      if (tapLength < 300 && tapLength > 0 && e.touches.length === 1) {
+        const touch = e.touches[0];
+        const rect = container.getBoundingClientRect();
+        const centerX = rect.width / 2;
+        const centerY = rect.height / 2;
+        
+        if (Math.abs(touch.clientX - (rect.left + centerX)) < 80 && 
+            Math.abs(touch.clientY - (rect.top + centerY)) < 80) {
+          e.preventDefault();
+          toggleFullscreen();
+        }
+      }
+      lastTap = currentTime;
+    });
+
+    // ===== KEYBOARD CONTROLS =====
+    document.addEventListener('keydown', (e) => {
+      const key = e.key.toLowerCase();
+      
+      switch(key) {
+        case 'f':
+          e.preventDefault();
+          toggleFullscreen();
+          break;
+          
+        case 'enter':
+          // SOLO se siamo in fullscreen
+          if (!isFullscreen) {
+            showOverlay('📺 Premi F per fullscreen');
+            break;
+          }
+          
+          // Metti in pausa/play
+          if (!video.paused) {
+            video.pause();
+            showPauseIndicator();
+            
+            // Mostra EPG (solo se in fullscreen e in pausa)
+            if (epgData && epgData.current) {
+              setTimeout(() => {
+                showEPG(epgData.current);
+              }, 300);
+            } else {
+              showOverlay('📺 EPG non disponibile');
+            }
+          } else {
+            video.play();
+            hideEPG();
+          }
+          break;
+          
+        case 'arrowleft':
+          video.currentTime = Math.max(video.currentTime - 10, 0);
+          if (player && player.isLive()) {
+            const liveTime = getLiveTime();
+            if (liveTime) {
+              const behind = player.seekRange().end - video.currentTime;
+              const timeStr = formatLiveTime(liveTime);
+              showOverlay(`⏪ ${timeStr} (${formatTime(behind)} indietro)`);
+            } else {
+              showOverlay(`⏪ ${formatTime(video.currentTime)}`);
+            }
+          } else {
+            showOverlay(`⏪ ${formatTime(video.currentTime)}`);
+          }
+          break;
+          
+        case 'arrowright':
+          const maxTime = player && player.isLive() ? player.seekRange().end : video.duration;
+          video.currentTime = Math.min(video.currentTime + 10, maxTime);
+          if (player && player.isLive()) {
+            const liveTime = getLiveTime();
+            if (liveTime) {
+              const behind = player.seekRange().end - video.currentTime;
+              const timeStr = formatLiveTime(liveTime);
+              showOverlay(`⏩ ${timeStr} (${formatTime(behind)} indietro)`);
+            } else {
+              showOverlay(`⏩ ${formatTime(video.currentTime)}`);
+            }
+          } else {
+            showOverlay(`⏩ ${formatTime(video.currentTime)}`);
+          }
+          break;
+		  
+		  case 'arrowup':
+            changeResolution('next');
+            break;
+            
+          case 'arrowdown':
+            changeLanguage('next');
+            break;
+          
+        case ' ':
+          e.preventDefault();
+          if (video.paused) {
+            video.play();
+            hideEPG();
+          } else {
+            video.pause();
+            showPauseIndicator();
+            if (isFullscreen && epgData && epgData.current) {
+              setTimeout(() => showEPG(epgData.current), 300);
+            }
+          }
+          break;
+      }
+    });
+
+    // ===== FULLSCREEN LISTENERS =====
+    document.addEventListener('fullscreenchange', checkFullscreen);
+    document.addEventListener('webkitfullscreenchange', checkFullscreen);
+    document.addEventListener('mozfullscreenchange', checkFullscreen);
+    document.addEventListener('MSFullscreenChange', checkFullscreen);
+
+    // ===== CAMBIO RISOLUZIONE =====
+    function changeResolution(direction) {
+      if (!player) return;
+
+      const tracks = player.getVariantTracks();
+      if (tracks.length === 0) {
+        showOverlay('⚠️ Nessuna traccia disponibile');
+        return;
+      }
+
+      const heights = [...new Set(tracks.map(t => t.height).filter(h => h))].sort((a, b) => a - b);
+
+      if (heights.length === 0) {
+        showOverlay('⚠️ Risoluzioni non disponibili');
+        return;
+      }
+
+      const activeTrack = tracks.find(t => t.active);
+      const currentHeight = activeTrack ? activeTrack.height : heights[heights.length - 1];
+      let idx = heights.indexOf(currentHeight);
+
+      if (direction === 'next') {
+        idx = (idx + 1) % heights.length;
+      } else {
+        idx = (idx - 1 + heights.length) % heights.length;
+      }
+
+      const targetHeight = heights[idx];
+
+      // Disattiva ABR per selezione manuale
+      player.configure({ abr: { enabled: false } });
+
+      const currentLang = activeTrack ? activeTrack.language : null;
+      let targetTrack = tracks.find(t => t.height === targetHeight && t.language === currentLang);
+      if (!targetTrack) {
+        targetTrack = tracks.find(t => t.height === targetHeight);
+      }
+
+      if (targetTrack) {
+        player.selectVariantTrack(targetTrack, true);
+        showOverlay(`📺 Risoluzione: ${targetHeight}p`);
+      }
+    }
+
+    // ===== CAMBIO LINGUA AUDIO =====
+    function changeLanguage(direction) {
+      if (!player) return;
+
+      const tracks = player.getVariantTracks();
+      if (tracks.length === 0) {
+        showOverlay('⚠️ Nessuna traccia disponibile');
+        return;
+      }
+
+      const languages = [...new Set(tracks.map(t => t.language).filter(l => l))];
+
+      if (languages.length <= 1) {
+        showOverlay('⚠️ Solo una lingua disponibile');
+        return;
+      }
+
+      const activeTrack = tracks.find(t => t.active);
+      const currentLang = activeTrack ? activeTrack.language : languages[0];
+      let idx = languages.indexOf(currentLang);
+
+      if (direction === 'next') {
+        idx = (idx + 1) % languages.length;
+      } else {
+        idx = (idx - 1 + languages.length) % languages.length;
+      }
+
+      const targetLang = languages[idx];
+
+      try {
+        player.selectAudioLanguage(targetLang);
+        showOverlay(`🌍 Lingua: ${targetLang.toUpperCase()}`);
+      } catch (e) {
+        const currentHeight = activeTrack ? activeTrack.height : null;
+        let targetTrack = tracks.find(t => t.language === targetLang && t.height === currentHeight);
+        if (!targetTrack) {
+          targetTrack = tracks.find(t => t.language === targetLang);
+        }
+        if (targetTrack) {
+          player.selectVariantTrack(targetTrack, true);
+          showOverlay(`🌍 Lingua: ${targetLang.toUpperCase()}`);
+        }
+      }
+    }
+
+    // ===== INIT PLAYER =====
+    async function initPlayer() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const manifestUrl = urlParams.get("url");
+      const licenseKey = urlParams.get("key");
+
+      if (!manifestUrl || !licenseKey) {
+        showOverlay("❌ URL o chiavi mancanti");
+        console.error("Manifest URL o ClearKey non forniti.");
+        return;
+      }
+
+      player = new shaka.Player(video);
+      const ui = new shaka.ui.Overlay(player, container, video);
+      ui.configure({
+        controlPanelElements: ['play_pause', 'volume', 'time_and_duration', 'fullscreen', 'quality', 'captions', 'audio'],
+        addSeekBar: true,
+        addBigPlayButton: false
+      });
+
+      try {
+        const keys = JSON.parse(decodeURIComponent(licenseKey));
+        const clearKeys = {};
+        keys.forEach(({ keyId, key }) => clearKeys[keyId] = key);
+        player.configure({ drm: { clearKeys } });
+
+        await player.load(manifestUrl);
+        video.play();
+        
+        // Mostra info iniziali
+        const tracks = player.getVariantTracks();
+        const activeTrack = tracks.find(t => t.active);
+        if (activeTrack) {
+          showOverlay(`🎬 ${activeTrack.height || 'Auto'}p | 🌍 ${activeTrack.language.toUpperCase()}`);
+        }
+
+        // ===== RICEVI EPG =====
+        try {
+          window.addEventListener('message', (event) => {
+            if (event.data && event.data.type === 'epg') {
+              receiveEPG(event.data.program);
+            }
+          });
+          window.parent.postMessage({ type: 'requestEpg' }, '*');
+        } catch (e) {
+          console.log('EPG not available');
+        }
+
+        // Nascondi hint dopo 5 secondi
+        setTimeout(() => {
+          fullscreenHint.classList.remove('show');
+        }, 5000);
+
+      } catch (e) {
+        showOverlay("⚠️ Errore nel caricamento");
+        console.error("Errore:", e);
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", initPlayer);
+  </script>
+</body>
+</html>
