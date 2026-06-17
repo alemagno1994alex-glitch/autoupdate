@@ -1,12 +1,14 @@
 <!DOCTYPE html>
 <html lang="it">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Player</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.11.2/controls.min.css" />
   <style>
-    html, body {
+    html,
+    body {
       margin: 0;
       padding: 0;
       width: 100%;
@@ -14,20 +16,23 @@
       background-color: black;
       touch-action: pan-y;
     }
+
     #video-container {
       position: relative;
       width: 100%;
       height: 100%;
     }
+
     video {
       width: 100%;
       height: 100%;
     }
+
     #overlay {
       position: absolute;
       top: 20px;
       left: 20px;
-      background: rgba(0,0,0,0.85);
+      background: rgba(0, 0, 0, 0.85);
       color: white;
       padding: 10px 16px;
       border-radius: 8px;
@@ -36,9 +41,10 @@
       z-index: 1000;
       pointer-events: none;
       font-family: monospace;
-      border: 1px solid rgba(255,255,255,0.1);
+      border: 1px solid rgba(255, 255, 255, 0.1);
       backdrop-filter: blur(4px);
     }
+
     #touch-controls {
       position: absolute;
       top: 0;
@@ -48,6 +54,7 @@
       display: none;
       z-index: 999;
     }
+
     .touch-zone {
       position: absolute;
       width: 25%;
@@ -55,26 +62,32 @@
       opacity: 0.3;
       transition: opacity 0.2s;
     }
+
     .touch-zone.active {
       opacity: 0.5;
-      background: rgba(255,255,255,0.1);
+      background: rgba(255, 255, 255, 0.1);
     }
+
     #zone-top {
       top: 0;
       left: 37.5%;
     }
+
     #zone-bottom {
       bottom: 0;
       left: 37.5%;
     }
+
     #zone-left {
       top: 25%;
       left: 0;
     }
+
     #zone-right {
       top: 25%;
       right: 0;
     }
+
     .touch-zone-label {
       position: absolute;
       color: white;
@@ -82,36 +95,42 @@
       opacity: 0;
       transition: opacity 0.3s;
     }
+
     #zone-top .touch-zone-label {
       top: 20%;
       left: 50%;
       transform: translateX(-50%);
     }
+
     #zone-bottom .touch-zone-label {
       bottom: 20%;
       left: 50%;
       transform: translateX(-50%);
     }
+
     #zone-left .touch-zone-label {
       top: 50%;
       left: 30%;
       transform: translateY(-50%);
     }
+
     #zone-right .touch-zone-label {
       top: 50%;
       right: 30%;
       transform: translateY(-50%);
     }
+
     .touch-zone.active .touch-zone-label {
       opacity: 0.8;
     }
+
     #touch-toggle {
       position: absolute;
       bottom: 80px;
       right: 20px;
       width: 50px;
       height: 50px;
-      background: rgba(0,0,0,0.7);
+      background: rgba(0, 0, 0, 0.7);
       border-radius: 50%;
       display: flex;
       align-items: center;
@@ -122,16 +141,19 @@
       cursor: pointer;
       opacity: 0.7;
       transition: opacity 0.3s;
-      border: 1px solid rgba(255,255,255,0.2);
+      border: 1px solid rgba(255, 255, 255, 0.2);
     }
+
     #touch-toggle:hover {
       opacity: 1;
     }
+
     @media (max-width: 768px) {
       #touch-toggle {
         display: flex;
       }
     }
+
     @media (min-width: 769px) {
       #touch-toggle {
         display: none;
@@ -139,11 +161,13 @@
     }
   </style>
 </head>
+
 <body>
   <div id="video-container">
-    <video id="video" autoplay poster="https://upload.wikimedia.org/wikipedia/commons/7/76/Media_Player_Classic_logo.png" tabindex="0"></video>
+    <video id="video" autoplay
+      poster="https://upload.wikimedia.org/wikipedia/commons/7/76/Media_Player_Classic_logo.png" tabindex="0"></video>
     <div id="overlay"></div>
-    
+
     <div id="touch-controls">
       <div class="touch-zone" id="zone-top" data-action="resolution">
         <div class="touch-zone-label">🎬</div>
@@ -158,7 +182,7 @@
         <div class="touch-zone-label">⏩</div>
       </div>
     </div>
-    
+
     <div id="touch-toggle" title="Attiva controlli touch">
       👆
     </div>
@@ -180,41 +204,41 @@
 
     // ===== NUOVE FUNZIONI PER L'ORARIO LIVE =====
     function getLiveTime() {
-        if (!player || !player.isLive()) return null;
-        
-        try {
-            const now = new Date();
-            const liveEdge = player.seekRange().end;
-            const behind = liveEdge - video.currentTime;
-            const liveTime = new Date(now.getTime() - behind * 1000);
-            return liveTime;
-        } catch (e) {
-            return null;
-        }
+      if (!player || !player.isLive()) return null;
+
+      try {
+        const now = new Date();
+        const liveEdge = player.seekRange().end;
+        const behind = liveEdge - video.currentTime;
+        const liveTime = new Date(now.getTime() - behind * 1000);
+        return liveTime;
+      } catch (e) {
+        return null;
+      }
     }
 
     function formatLiveTime(date) {
-        if (!date) return '--:--';
-        const hours = date.getHours().toString().padStart(2, '0');
-        const mins = date.getMinutes().toString().padStart(2, '0');
-        return `${hours}:${mins}`;
+      if (!date) return '--:--';
+      const hours = date.getHours().toString().padStart(2, '0');
+      const mins = date.getMinutes().toString().padStart(2, '0');
+      return `${hours}:${mins}`;
     }
 
     function showOverlay(text, isLive = false) {
-        if (isLive && player && player.isLive()) {
-            const liveTime = getLiveTime();
-            if (liveTime) {
-                const behind = player.seekRange().end - video.currentTime;
-                const timeStr = formatLiveTime(liveTime);
-                overlay.textContent = `🔴 LIVE • ${timeStr} • ${formatTime(behind)} indietro`;
-            } else {
-                overlay.textContent = text;
-            }
+      if (isLive && player && player.isLive()) {
+        const liveTime = getLiveTime();
+        if (liveTime) {
+          const behind = player.seekRange().end - video.currentTime;
+          const timeStr = formatLiveTime(liveTime);
+          overlay.textContent = `🔴 LIVE • ${timeStr} • ${formatTime(behind)} indietro`;
         } else {
-            overlay.textContent = text;
+          overlay.textContent = text;
         }
-        overlay.style.display = 'block';
-        setTimeout(() => overlay.style.display = 'none', 3000);
+      } else {
+        overlay.textContent = text;
+      }
+      overlay.style.display = 'block';
+      setTimeout(() => overlay.style.display = 'none', 3000);
     }
 
     function formatTime(seconds) {
@@ -225,14 +249,14 @@
 
     function changeResolution(direction = 'next') {
       if (!player) return;
-      
+
       const tracks = player.getVariantTracks();
       const activeTrack = tracks.find(t => t.active);
-      
+
       if (!activeTrack) return;
-      
+
       const sameLangTracks = tracks.filter(t => t.language === activeTrack.language);
-      
+
       let nextIndex;
       if (direction === 'next') {
         const currentIndex = sameLangTracks.findIndex(t => t.id === activeTrack.id);
@@ -241,7 +265,7 @@
         const currentIndex = sameLangTracks.findIndex(t => t.id === activeTrack.id);
         nextIndex = (currentIndex - 1 + sameLangTracks.length) % sameLangTracks.length;
       }
-      
+
       const nextTrack = sameLangTracks[nextIndex];
       player.configure({ abr: { enabled: false } });
       player.selectVariantTrack(nextTrack, true);
@@ -250,25 +274,25 @@
 
     function changeLanguage(direction = 'next') {
       if (!player) return;
-      
+
       const tracks = player.getVariantTracks();
       const activeTrack = tracks.find(t => t.active);
-      
+
       if (!activeTrack) return;
-      
+
       const languages = [...new Set(tracks.map(t => t.language))];
       const currentLangIndex = languages.indexOf(activeTrack.language);
-      
+
       let nextLangIndex;
       if (direction === 'next') {
         nextLangIndex = (currentLangIndex + 1) % languages.length;
       } else {
         nextLangIndex = (currentLangIndex - 1 + languages.length) % languages.length;
       }
-      
+
       const nextLang = languages[nextLangIndex];
       const langTracks = tracks.filter(t => t.language === nextLang);
-      
+
       if (langTracks.length > 0) {
         player.selectAudioLanguage(nextLang);
         showOverlay(`🌍 Lingua: ${nextLang.toUpperCase()}`);
@@ -277,14 +301,14 @@
 
     function toggleSubtitles() {
       if (!player) return;
-      
+
       const isVisible = player.isTextTrackVisible();
       const textTracks = player.getTextTracks();
-      
+
       if (!isVisible && textTracks.length > 0) {
         player.selectTextTrack(textTracks[0]);
       }
-      
+
       player.setTextTrackVisibility(!isVisible);
       showOverlay(`📝 Sottotitoli: ${player.isTextTrackVisible() ? 'ON' : 'OFF'}`);
     }
@@ -294,7 +318,7 @@
       touchControls.style.display = touchControlsEnabled ? 'block' : 'none';
       touchToggle.style.opacity = touchControlsEnabled ? '1' : '0.7';
       touchToggle.title = touchControlsEnabled ? 'Disattiva controlli touch' : 'Attiva controlli touch';
-      
+
       if (touchControlsEnabled) {
         showOverlay('👆 Controlli touch ATTIVATI');
       }
@@ -302,58 +326,58 @@
 
     function setupTouchControls() {
       const touchZones = document.querySelectorAll('.touch-zone');
-      
+
       touchZones.forEach(zone => {
         zone.addEventListener('touchstart', (e) => {
           e.preventDefault();
           e.stopPropagation();
           zone.classList.add('active');
-          
+
           const action = zone.getAttribute('data-action');
           let direction = 'next';
-          
+
           if (e.touches.length > 1 && (action === 'rewind' || action === 'forward')) {
             direction = 'prev';
           }
-          
+
           handleTouchAction(action, direction);
-          
+
           clearTimeout(touchTimer);
           touchTimer = setTimeout(() => {
             const interval = setInterval(() => {
               handleTouchAction(action, direction);
             }, 300);
-            
+
             const clearIntervalOnEnd = () => {
               clearInterval(interval);
               zone.removeEventListener('touchend', clearIntervalOnEnd);
               zone.removeEventListener('touchcancel', clearIntervalOnEnd);
             };
-            
+
             zone.addEventListener('touchend', clearIntervalOnEnd, { once: true });
             zone.addEventListener('touchcancel', clearIntervalOnEnd, { once: true });
           }, 500);
         });
-        
+
         zone.addEventListener('touchend', (e) => {
           e.preventDefault();
           e.stopPropagation();
           zone.classList.remove('active');
           clearTimeout(touchTimer);
         });
-        
+
         zone.addEventListener('touchcancel', (e) => {
           e.preventDefault();
           e.stopPropagation();
           zone.classList.remove('active');
           clearTimeout(touchTimer);
         });
-        
+
         zone.addEventListener('touchmove', (e) => {
           e.preventDefault();
         });
       });
-      
+
       touchToggle.addEventListener('click', toggleTouchControls);
       touchToggle.addEventListener('touchstart', (e) => {
         e.preventDefault();
@@ -363,7 +387,7 @@
     }
 
     function handleTouchAction(action, direction = 'next') {
-      switch(action) {
+      switch (action) {
         case 'resolution':
           changeResolution(direction);
           break;
@@ -408,20 +432,20 @@
     container.addEventListener('touchstart', (e) => {
       const currentTime = new Date().getTime();
       const tapLength = currentTime - lastTap;
-      
+
       if (tapLength < 300 && tapLength > 0 && e.touches.length === 1) {
         const touch = e.touches[0];
         const rect = container.getBoundingClientRect();
         const centerX = rect.width / 2;
         const centerY = rect.height / 2;
-        
-        if (Math.abs(touch.clientX - (rect.left + centerX)) < 50 && 
-            Math.abs(touch.clientY - (rect.top + centerY)) < 50) {
+
+        if (Math.abs(touch.clientX - (rect.left + centerX)) < 50 &&
+          Math.abs(touch.clientY - (rect.top + centerY)) < 50) {
           e.preventDefault();
           toggleSubtitles();
         }
       }
-      
+
       lastTap = currentTime;
     });
 
@@ -452,7 +476,7 @@
 
         await player.load(manifestUrl);
         video.play();
-        
+
         const tracks = player.getVariantTracks();
         const activeTrack = tracks.find(t => t.active);
         if (activeTrack) {
@@ -467,9 +491,17 @@
 
       document.addEventListener('keydown', (event) => {
         const key = event.key.toLowerCase();
-        
+
         switch (key) {
           case 'enter':
+
+            // 🔥 Toggle pausa/play
+            if (video.paused) {
+              video.play();
+            } else {
+              video.pause();
+            }
+
             if (player.isLive()) {
               const liveTime = getLiveTime();
               if (liveTime) {
@@ -489,7 +521,8 @@
               showOverlay(`Timeline: ${formatTime(video.currentTime)} / ${formatTime(video.duration)}`);
             }
             break;
-            
+
+
           case 'arrowleft':
             video.currentTime = Math.max(video.currentTime - 10, 0);
             if (player && player.isLive()) {
@@ -505,7 +538,7 @@
               showOverlay(`⏪ ${formatTime(video.currentTime)}`);
             }
             break;
-            
+
           case 'arrowright':
             const maxTime = player && player.isLive() ? player.seekRange().end : video.duration;
             video.currentTime = Math.min(video.currentTime + 10, maxTime);
@@ -522,52 +555,52 @@
               showOverlay(`⏩ ${formatTime(video.currentTime)}`);
             }
             break;
-            
+
           case 'arrowup':
             changeResolution('next');
             break;
-            
-			case 'arrowdown':
-					  const textTracks = player.getTextTracks();
 
-					  if (textTracks.length === 0) {
-						showOverlay('⚠️ Nessun sottotitolo disponibile');
-						break;
-					  }
+          case 'arrowdown':
+            const textTracks = player.getTextTracks();
 
-					  const isVisible = player.isTextTrackVisible();
-					  const activeText = textTracks.find(t => t.active);
-					  const currentIdx = activeText ? textTracks.indexOf(activeText) : -1;
-					  const nextIdx = currentIdx + 1;
+            if (textTracks.length === 0) {
+              showOverlay('⚠️ Nessun sottotitolo disponibile');
+              break;
+            }
 
-					  if (!isVisible) {
-						// Accendi dal primo
-						player.selectTextTrack(textTracks[0]);
-						player.setTextTrackVisibility(true);
-						showOverlay(`💬 ${textTracks[0].language?.toUpperCase() || 'Sub 1'}`);
-					  } else if (nextIdx < textTracks.length) {
-						// Passa al prossimo
-						player.selectTextTrack(textTracks[nextIdx]);
-						showOverlay(`💬 ${textTracks[nextIdx].language?.toUpperCase() || `Sub ${nextIdx + 1}`}`);
-					  } else {
-						// Hai ciclato tutti, spegni
-						player.setTextTrackVisibility(false);
-						showOverlay('💬 Sottotitoli: OFF');
-					  }
-					  break;
-            
+            const isVisible = player.isTextTrackVisible();
+            const activeText = textTracks.find(t => t.active);
+            const currentIdx = activeText ? textTracks.indexOf(activeText) : -1;
+            const nextIdx = currentIdx + 1;
+
+            if (!isVisible) {
+              // Accendi dal primo
+              player.selectTextTrack(textTracks[0]);
+              player.setTextTrackVisibility(true);
+              showOverlay(`💬 ${textTracks[0].language?.toUpperCase() || 'Sub 1'}`);
+            } else if (nextIdx < textTracks.length) {
+              // Passa al prossimo
+              player.selectTextTrack(textTracks[nextIdx]);
+              showOverlay(`💬 ${textTracks[nextIdx].language?.toUpperCase() || `Sub ${nextIdx + 1}`}`);
+            } else {
+              // Hai ciclato tutti, spegni
+              player.setTextTrackVisibility(false);
+              showOverlay('💬 Sottotitoli: OFF');
+            }
+            break;
+
           case ' ':
             event.preventDefault();
             video.paused ? video.play() : video.pause();
             showOverlay(video.paused ? '⏸️ Pausa' : '▶️ Play');
             break;
-            
+
           case 's':
           case 'subtitle':
           case 'subtitles':
             toggleSubtitles();
             break;
-            
+
           case 't':
             if (window.innerWidth <= 768) {
               toggleTouchControls();
@@ -582,7 +615,7 @@
     }
 
     document.addEventListener("DOMContentLoaded", initPlayer);
-    
+
     window.addEventListener('load', () => {
       if (window.innerWidth <= 768) {
         setTimeout(() => {
@@ -597,4 +630,5 @@
     });
   </script>
 </body>
+
 </html>
