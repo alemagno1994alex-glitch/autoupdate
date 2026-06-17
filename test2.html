@@ -193,7 +193,7 @@
     <!-- EPG Info - appare SOLO in fullscreen e in pausa -->
     <div id="epg-info">
       <div class="epg-title" id="epgTitle">Programma</div>
-      <div class="epg-time" id="epgTime">Orario</div>
+      
       <div class="epg-desc" id="epgDesc">Descrizione...</div>
     </div>
     
@@ -284,7 +284,7 @@
       const endTime = program.stop ? formatTime(program.stop) : '--:--';
       
       epgTitle.innerHTML = `<span class="epg-now-badge">● IN ONDA</span> ${program.title || 'Programma'}`;
-      epgTime.textContent = `${startTime} - ${endTime}`;
+      
       epgDesc.textContent = program.desc || 'Descrizione non disponibile';
       
       epgInfo.classList.add('show');
