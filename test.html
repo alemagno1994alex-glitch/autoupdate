@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Player</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.11.2/controls.min.css" />
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background-color: black;
+      touch-action: pan-y;
+    }
+    #video-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+    video {
+      width: 100%;
+      height: 100%;
+    }
+    #overlay {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background: rgba(0,0,0,0.85);
+      color: white;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-size: 16px;
+      display: none;
+      z-index: 1000;
+      pointer-events: none;
+      font-family: monospace;
+      border: 1px solid rgba(255,255,255,0.1);
+      backdrop-filter: blur(4px);
+    }
+    #touch-controls {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: none;
+      z-index: 999;
+    }
+    .touch-zone {
+      position: absolute;
+      width: 25%;
+      height: 50%;
+      opacity: 0.3;
+      transition: opacity 0.2s;
+    }
+    .touch-zone.active {
+      opacity: 0.5;
+      background: rgba(255,255,255,0.1);
+    }
+    #zone-top {
+      top: 0;
+      left: 37.5%;
+    }
+    #zone-bottom {
+      bottom: 0;
+      left: 37.5%;
+    }
+    #zone-left {
+      top: 25%;
+      left: 0;
+    }
+    #zone-right {
+      top: 25%;
+      right: 0;
+    }
+    .touch-zone-label {
+      position: absolute;
+      color: white;
+      font-size: 28px;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    #zone-top .touch-zone-label {
+      top: 20%;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+    #zone-bottom .touch-zone-label {
+      bottom: 20%;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+    #zone-left .touch-zone-label {
+      top: 50%;
+      left: 30%;
+      transform: translateY(-50%);
+    }
+    #zone-right .touch-zone-label {
+      top: 50%;
+      right: 30%;
+      transform: translateY(-50%);
+    }
+    .touch-zone.active .touch-zone-label {
+      opacity: 0.8;
+    }
+    #touch-toggle {
+      position: absolute;
+      bottom: 80px;
+      right: 20px;
+      width: 50px;
+      height: 50px;
+      background: rgba(0,0,0,0.7);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 24px;
+      z-index: 1001;
+      cursor: pointer;
+      opacity: 0.7;
+      transition: opacity 0.3s;
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+    #touch-toggle:hover {
+      opacity: 1;
+    }
+    @media (max-width: 768px) {
+      #touch-toggle {
+        display: flex;
+      }
+    }
+    @media (min-width: 769px) {
+      #touch-toggle {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="video-container">
+    <video id="video" autoplay poster="https://upload.wikimedia.org/wikipedia/commons/7/76/Media_Player_Classic_logo.png" tabindex="0"></video>
+    <div id="overlay"></div>
+    
+    <div id="touch-controls">
+      <div class="touch-zone" id="zone-top" data-action="resolution">
+        <div class="touch-zone-label">🎬</div>
+      </div>
+      <div class="touch-zone" id="zone-bottom" data-action="language">
+        <div class="touch-zone-label">🌍</div>
+      </div>
+      <div class="touch-zone" id="zone-left" data-action="rewind">
+        <div class="touch-zone-label">⏪</div>
+      </div>
+      <div class="touch-zone" id="zone-right" data-action="forward">
+        <div class="touch-zone-label">⏩</div>
+      </div>
+    </div>
+    
+    <div id="touch-toggle" title="Attiva controlli touch">
+      👆
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.11.2/shaka-player.compiled.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.11.2/shaka-player.ui.min.js"></script>
+  <script>
+    shaka.polyfill.installAll();
+
+    const video = document.getElementById('video');
+    const container = document.getElementById('video-container');
+    const overlay = document.getElementById('overlay');
+    const touchControls = document.getElementById('touch-controls');
+    const touchToggle = document.getElementById('touch-toggle');
+    let player;
+    let touchControlsEnabled = false;
+    let touchTimer = null;
+
+    // ===== NUOVE FUNZIONI PER L'ORARIO LIVE =====
+    function getLiveTime() {
+        if (!player || !player.isLive()) return null;
+        
+        try {
+            const now = new Date();
+            const liveEdge = player.seekRange().end;
+            const behind = liveEdge - video.currentTime;
+            const liveTime = new Date(now.getTime() - behind * 1000);
+            return liveTime;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function formatLiveTime(date) {
+        if (!date) return '--:--';
+        const hours = date.getHours().toString().padStart(2, '0');
+        const mins = date.getMinutes().toString().padStart(2, '0');
+        return `${hours}:${mins}`;
+    }
+
+    function showOverlay(text, isLive = false) {
+        if (isLive && player && player.isLive()) {
+            const liveTime = getLiveTime();
+            if (liveTime) {
+                const behind = player.seekRange().end - video.currentTime;
+                const timeStr = formatLiveTime(liveTime);
+                overlay.textContent = `🔴 LIVE • ${timeStr} • ${formatTime(behind)} indietro`;
+            } else {
+                overlay.textContent = text;
+            }
+        } else {
+            overlay.textContent = text;
+        }
+        overlay.style.display = 'block';
+        setTimeout(() => overlay.style.display = 'none', 3000);
+    }
+
+    function formatTime(seconds) {
+      const min = Math.floor(seconds / 60);
+      const sec = Math.floor(seconds % 60);
+      return `${min}:${sec.toString().padStart(2, '0')}`;
+    }
+
+    function changeResolution(direction = 'next') {
+      if (!player) return;
+      
+      const tracks = player.getVariantTracks();
+      const activeTrack = tracks.find(t => t.active);
+      
+      if (!activeTrack) return;
+      
+      const sameLangTracks = tracks.filter(t => t.language === activeTrack.language);
+      
+      let nextIndex;
+      if (direction === 'next') {
+        const currentIndex = sameLangTracks.findIndex(t => t.id === activeTrack.id);
+        nextIndex = (currentIndex + 1) % sameLangTracks.length;
+      } else {
+        const currentIndex = sameLangTracks.findIndex(t => t.id === activeTrack.id);
+        nextIndex = (currentIndex - 1 + sameLangTracks.length) % sameLangTracks.length;
+      }
+      
+      const nextTrack = sameLangTracks[nextIndex];
+      player.configure({ abr: { enabled: false } });
+      player.selectVariantTrack(nextTrack, true);
+      showOverlay(`🎬 Risoluzione: ${nextTrack.height || nextTrack.width || 'Auto'}p`);
+    }
+
+    function changeLanguage(direction = 'next') {
+      if (!player) return;
+      
+      const tracks = player.getVariantTracks();
+      const activeTrack = tracks.find(t => t.active);
+      
+      if (!activeTrack) return;
+      
+      const languages = [...new Set(tracks.map(t => t.language))];
+      const currentLangIndex = languages.indexOf(activeTrack.language);
+      
+      let nextLangIndex;
+      if (direction === 'next') {
+        nextLangIndex = (currentLangIndex + 1) % languages.length;
+      } else {
+        nextLangIndex = (currentLangIndex - 1 + languages.length) % languages.length;
+      }
+      
+      const nextLang = languages[nextLangIndex];
+      const langTracks = tracks.filter(t => t.language === nextLang);
+      
+      if (langTracks.length > 0) {
+        player.selectAudioLanguage(nextLang);
+        showOverlay(`🌍 Lingua: ${nextLang.toUpperCase()}`);
+      }
+    }
+
+    function toggleSubtitles() {
+      if (!player) return;
+      
+      const isVisible = player.isTextTrackVisible();
+      const textTracks = player.getTextTracks();
+      
+      if (!isVisible && textTracks.length > 0) {
+        player.selectTextTrack(textTracks[0]);
+      }
+      
+      player.setTextTrackVisibility(!isVisible);
+      showOverlay(`📝 Sottotitoli: ${player.isTextTrackVisible() ? 'ON' : 'OFF'}`);
+    }
+
+    function toggleTouchControls() {
+      touchControlsEnabled = !touchControlsEnabled;
+      touchControls.style.display = touchControlsEnabled ? 'block' : 'none';
+      touchToggle.style.opacity = touchControlsEnabled ? '1' : '0.7';
+      touchToggle.title = touchControlsEnabled ? 'Disattiva controlli touch' : 'Attiva controlli touch';
+      
+      if (touchControlsEnabled) {
+        showOverlay('👆 Controlli touch ATTIVATI');
+      }
+    }
+
+    function setupTouchControls() {
+      const touchZones = document.querySelectorAll('.touch-zone');
+      
+      touchZones.forEach(zone => {
+        zone.addEventListener('touchstart', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          zone.classList.add('active');
+          
+          const action = zone.getAttribute('data-action');
+          let direction = 'next';
+          
+          if (e.touches.length > 1 && (action === 'rewind' || action === 'forward')) {
+            direction = 'prev';
+          }
+          
+          handleTouchAction(action, direction);
+          
+          clearTimeout(touchTimer);
+          touchTimer = setTimeout(() => {
+            const interval = setInterval(() => {
+              handleTouchAction(action, direction);
+            }, 300);
+            
+            const clearIntervalOnEnd = () => {
+              clearInterval(interval);
+              zone.removeEventListener('touchend', clearIntervalOnEnd);
+              zone.removeEventListener('touchcancel', clearIntervalOnEnd);
+            };
+            
+            zone.addEventListener('touchend', clearIntervalOnEnd, { once: true });
+            zone.addEventListener('touchcancel', clearIntervalOnEnd, { once: true });
+          }, 500);
+        });
+        
+        zone.addEventListener('touchend', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          zone.classList.remove('active');
+          clearTimeout(touchTimer);
+        });
+        
+        zone.addEventListener('touchcancel', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          zone.classList.remove('active');
+          clearTimeout(touchTimer);
+        });
+        
+        zone.addEventListener('touchmove', (e) => {
+          e.preventDefault();
+        });
+      });
+      
+      touchToggle.addEventListener('click', toggleTouchControls);
+      touchToggle.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleTouchControls();
+      });
+    }
+
+    function handleTouchAction(action, direction = 'next') {
+      switch(action) {
+        case 'resolution':
+          changeResolution(direction);
+          break;
+        case 'language':
+          changeLanguage(direction);
+          break;
+        case 'rewind':
+          video.currentTime = Math.max(video.currentTime - 10, 0);
+          if (player && player.isLive()) {
+            const liveTime = getLiveTime();
+            if (liveTime) {
+              const behind = player.seekRange().end - video.currentTime;
+              const timeStr = formatLiveTime(liveTime);
+              showOverlay(`⏪ ${timeStr} (${formatTime(behind)} indietro)`);
+            } else {
+              showOverlay(`⏪ ${formatTime(video.currentTime)}`);
+            }
+          } else {
+            showOverlay(`⏪ ${formatTime(video.currentTime)}`);
+          }
+          break;
+        case 'forward':
+          const maxTime = player && player.isLive() ? player.seekRange().end : video.duration;
+          video.currentTime = Math.min(video.currentTime + 10, maxTime);
+          if (player && player.isLive()) {
+            const liveTime = getLiveTime();
+            if (liveTime) {
+              const behind = player.seekRange().end - video.currentTime;
+              const timeStr = formatLiveTime(liveTime);
+              showOverlay(`⏩ ${timeStr} (${formatTime(behind)} indietro)`);
+            } else {
+              showOverlay(`⏩ ${formatTime(video.currentTime)}`);
+            }
+          } else {
+            showOverlay(`⏩ ${formatTime(video.currentTime)}`);
+          }
+          break;
+      }
+    }
+
+    let lastTap = 0;
+    container.addEventListener('touchstart', (e) => {
+      const currentTime = new Date().getTime();
+      const tapLength = currentTime - lastTap;
+      
+      if (tapLength < 300 && tapLength > 0 && e.touches.length === 1) {
+        const touch = e.touches[0];
+        const rect = container.getBoundingClientRect();
+        const centerX = rect.width / 2;
+        const centerY = rect.height / 2;
+        
+        if (Math.abs(touch.clientX - (rect.left + centerX)) < 50 && 
+            Math.abs(touch.clientY - (rect.top + centerY)) < 50) {
+          e.preventDefault();
+          toggleSubtitles();
+        }
+      }
+      
+      lastTap = currentTime;
+    });
+
+    async function initPlayer() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const manifestUrl = urlParams.get("url");
+      const licenseKey = urlParams.get("key");
+
+      if (!manifestUrl || !licenseKey) {
+        showOverlay("❌ URL o chiavi mancanti");
+        console.error("Manifest URL o ClearKey non forniti.");
+        return;
+      }
+
+      player = new shaka.Player(video);
+      const ui = new shaka.ui.Overlay(player, container, video);
+      ui.configure({
+        controlPanelElements: ['play_pause', 'volume', 'time_and_duration', 'fullscreen', 'quality', 'captions', 'audio'],
+        addSeekBar: true,
+        addBigPlayButton: false
+      });
+
+      try {
+        const keys = JSON.parse(decodeURIComponent(licenseKey));
+        const clearKeys = {};
+        keys.forEach(({ keyId, key }) => clearKeys[keyId] = key);
+        player.configure({ drm: { clearKeys } });
+
+        await player.load(manifestUrl);
+        video.play();
+        
+        const tracks = player.getVariantTracks();
+        const activeTrack = tracks.find(t => t.active);
+        if (activeTrack) {
+          showOverlay(`🎬 ${activeTrack.height || 'Auto'}p | 🌍 ${activeTrack.language.toUpperCase()}`);
+        }
+      } catch (e) {
+        showOverlay("⚠️ Errore nel caricamento");
+        console.error("Errore:", e);
+      }
+
+      setupTouchControls();
+
+      document.addEventListener('keydown', (event) => {
+        const key = event.key.toLowerCase();
+        
+        switch (key) {
+          case 'enter':
+            if (player.isLive()) {
+              const liveTime = getLiveTime();
+              if (liveTime) {
+                const behind = player.seekRange().end - video.currentTime;
+                const timeStr = formatLiveTime(liveTime);
+                showOverlay(`🔴 LIVE • ${timeStr} • ${formatTime(behind)} indietro`);
+              } else {
+                const now = new Date();
+                const liveEdge = player.seekRange().end;
+                const behind = liveEdge - video.currentTime;
+                const liveTime = new Date(now.getTime() - behind * 1000);
+                const h = liveTime.getHours().toString().padStart(2, '0');
+                const m = liveTime.getMinutes().toString().padStart(2, '0');
+                showOverlay(`🔴 LIVE • ${h}:${m} • ${formatTime(behind)} indietro`);
+              }
+            } else {
+              showOverlay(`Timeline: ${formatTime(video.currentTime)} / ${formatTime(video.duration)}`);
+            }
+            break;
+            
+          case 'arrowleft':
+            video.currentTime = Math.max(video.currentTime - 10, 0);
+            if (player && player.isLive()) {
+              const liveTime = getLiveTime();
+              if (liveTime) {
+                const behind = player.seekRange().end - video.currentTime;
+                const timeStr = formatLiveTime(liveTime);
+                showOverlay(`⏪ ${timeStr} (${formatTime(behind)} indietro)`);
+              } else {
+                showOverlay(`⏪ ${formatTime(video.currentTime)}`);
+              }
+            } else {
+              showOverlay(`⏪ ${formatTime(video.currentTime)}`);
+            }
+            break;
+            
+          case 'arrowright':
+            const maxTime = player && player.isLive() ? player.seekRange().end : video.duration;
+            video.currentTime = Math.min(video.currentTime + 10, maxTime);
+            if (player && player.isLive()) {
+              const liveTime = getLiveTime();
+              if (liveTime) {
+                const behind = player.seekRange().end - video.currentTime;
+                const timeStr = formatLiveTime(liveTime);
+                showOverlay(`⏩ ${timeStr} (${formatTime(behind)} indietro)`);
+              } else {
+                showOverlay(`⏩ ${formatTime(video.currentTime)}`);
+              }
+            } else {
+              showOverlay(`⏩ ${formatTime(video.currentTime)}`);
+            }
+            break;
+            
+          case 'arrowup':
+            changeResolution('next');
+            break;
+            
+          case 'arrowdown':
+            changeLanguage('next');
+            break;
+            
+          case ' ':
+            event.preventDefault();
+            video.paused ? video.play() : video.pause();
+            showOverlay(video.paused ? '⏸️ Pausa' : '▶️ Play');
+            break;
+            
+          case 's':
+          case 'subtitle':
+          case 'subtitles':
+            toggleSubtitles();
+            break;
+            
+          case 't':
+            if (window.innerWidth <= 768) {
+              toggleTouchControls();
+            }
+            break;
+        }
+      });
+
+      document.addEventListener('keyup', (event) => {
+        const key = event.key.toLowerCase();
+      });
+    }
+
+    document.addEventListener("DOMContentLoaded", initPlayer);
+    
+    window.addEventListener('load', () => {
+      if (window.innerWidth <= 768) {
+        setTimeout(() => {
+          if (!touchControlsEnabled) {
+            touchControlsEnabled = true;
+            touchControls.style.display = 'block';
+            touchToggle.style.opacity = '1';
+            showOverlay('👆 Controlli touch disponibili');
+          }
+        }, 5000);
+      }
+    });
+  </script>
+</body>
+</html>
