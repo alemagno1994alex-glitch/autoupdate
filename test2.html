@@ -184,11 +184,7 @@
     <video id="video" autoplay poster="https://upload.wikimedia.org/wikipedia/commons/7/76/Media_Player_Classic_logo.png" tabindex="0"></video>
     <div id="overlay"></div>
     
-    <!-- Fullscreen hint -->
-    <div id="fullscreen-hint" class="show">
-      <i>⛶</i>
-      Tocca due volte o premi F per fullscreen
-    </div>
+        
     
     <!-- EPG Info - appare SOLO in fullscreen e in pausa -->
     <div id="epg-info">
@@ -393,12 +389,7 @@
           break;
           
         case 'enter':
-          // SOLO se siamo in fullscreen
-          if (!isFullscreen) {
-            showOverlay('📺 Premi F per fullscreen');
-            break;
-          }
-          
+                   
           // Metti in pausa/play
           if (!video.paused) {
             video.pause();
