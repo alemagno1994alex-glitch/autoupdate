@@ -455,9 +455,34 @@
             changeResolution('next');
             break;
             
-          case 'arrowdown':
-            changeLanguage('next');
-            break;
+         case 'arrowdown':
+		  const textTracks = player.getTextTracks();
+
+		  if (textTracks.length === 0) {
+			showOverlay('⚠️ Nessun sottotitolo disponibile');
+			break;
+		  }
+
+		  const isVisible = player.isTextTrackVisible();
+		  const activeText = textTracks.find(t => t.active);
+		  const currentIdx = activeText ? textTracks.indexOf(activeText) : -1;
+		  const nextIdx = currentIdx + 1;
+
+		  if (!isVisible) {
+			// Accendi dal primo
+			player.selectTextTrack(textTracks[0]);
+			player.setTextTrackVisibility(true);
+			showOverlay(`💬 ${textTracks[0].language?.toUpperCase() || 'Sub 1'}`);
+		  } else if (nextIdx < textTracks.length) {
+			// Passa al prossimo
+			player.selectTextTrack(textTracks[nextIdx]);
+			showOverlay(`💬 ${textTracks[nextIdx].language?.toUpperCase() || `Sub ${nextIdx + 1}`}`);
+		  } else {
+			// Hai ciclato tutti, spegni
+			player.setTextTrackVisibility(false);
+			showOverlay('💬 Sottotitoli: OFF');
+		  }
+		  break;
           
         case ' ':
           e.preventDefault();
