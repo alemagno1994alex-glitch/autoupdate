@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="it">
 
@@ -45,120 +46,6 @@
       backdrop-filter: blur(4px);
     }
 
-    #touch-controls {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      display: none;
-      z-index: 999;
-    }
-
-    .touch-zone {
-      position: absolute;
-      width: 25%;
-      height: 50%;
-      opacity: 0.3;
-      transition: opacity 0.2s;
-    }
-
-    .touch-zone.active {
-      opacity: 0.5;
-      background: rgba(255, 255, 255, 0.1);
-    }
-
-    #zone-top {
-      top: 0;
-      left: 37.5%;
-    }
-
-    #zone-bottom {
-      bottom: 0;
-      left: 37.5%;
-    }
-
-    #zone-left {
-      top: 25%;
-      left: 0;
-    }
-
-    #zone-right {
-      top: 25%;
-      right: 0;
-    }
-
-    .touch-zone-label {
-      position: absolute;
-      color: white;
-      font-size: 28px;
-      opacity: 0;
-      transition: opacity 0.3s;
-    }
-
-    #zone-top .touch-zone-label {
-      top: 20%;
-      left: 50%;
-      transform: translateX(-50%);
-    }
-
-    #zone-bottom .touch-zone-label {
-      bottom: 20%;
-      left: 50%;
-      transform: translateX(-50%);
-    }
-
-    #zone-left .touch-zone-label {
-      top: 50%;
-      left: 30%;
-      transform: translateY(-50%);
-    }
-
-    #zone-right .touch-zone-label {
-      top: 50%;
-      right: 30%;
-      transform: translateY(-50%);
-    }
-
-    .touch-zone.active .touch-zone-label {
-      opacity: 0.8;
-    }
-
-    #touch-toggle {
-      position: absolute;
-      bottom: 80px;
-      right: 20px;
-      width: 50px;
-      height: 50px;
-      background: rgba(0, 0, 0, 0.7);
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: white;
-      font-size: 24px;
-      z-index: 1001;
-      cursor: pointer;
-      opacity: 0.7;
-      transition: opacity 0.3s;
-      border: 1px solid rgba(255, 255, 255, 0.2);
-    }
-
-    #touch-toggle:hover {
-      opacity: 1;
-    }
-
-    @media (max-width: 768px) {
-      #touch-toggle {
-        display: flex;
-      }
-    }
-
-    @media (min-width: 769px) {
-      #touch-toggle {
-        display: none;
-      }
-    }
   </style>
 </head>
 
@@ -168,24 +55,6 @@
       poster="https://upload.wikimedia.org/wikipedia/commons/7/76/Media_Player_Classic_logo.png" tabindex="0"></video>
     <div id="overlay"></div>
 
-    <div id="touch-controls">
-      <div class="touch-zone" id="zone-top" data-action="resolution">
-        <div class="touch-zone-label">🎬</div>
-      </div>
-      <div class="touch-zone" id="zone-bottom" data-action="language">
-        <div class="touch-zone-label">🌍</div>
-      </div>
-      <div class="touch-zone" id="zone-left" data-action="rewind">
-        <div class="touch-zone-label">⏪</div>
-      </div>
-      <div class="touch-zone" id="zone-right" data-action="forward">
-        <div class="touch-zone-label">⏩</div>
-      </div>
-    </div>
-
-    <div id="touch-toggle" title="Attiva controlli touch">
-      👆
-    </div>
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.11.2/shaka-player.compiled.js"></script>
@@ -199,13 +68,11 @@
     const touchControls = document.getElementById('touch-controls');
     const touchToggle = document.getElementById('touch-toggle');
     let player;
-    let touchControlsEnabled = false;
-    let touchTimer = null;
+    let isAutoResolution = true;
 
-    // ===== NUOVE FUNZIONI PER L'ORARIO LIVE =====
+    // ===== FUNZIONI PER L'ORARIO LIVE =====
     function getLiveTime() {
       if (!player || !player.isLive()) return null;
-
       try {
         const now = new Date();
         const liveEdge = player.seekRange().end;
@@ -247,31 +114,64 @@
       return `${min}:${sec.toString().padStart(2, '0')}`;
     }
 
-    function changeResolution(direction = 'next') {
+    // ===== GESTIONE RISOLUZIONE CON SOLO FRECCIA SU =====
+    function cycleResolution() {
       if (!player) return;
 
       const tracks = player.getVariantTracks();
-      const activeTrack = tracks.find(t => t.active);
+      if (tracks.length === 0) return;
 
-      if (!activeTrack) return;
-
-      const sameLangTracks = tracks.filter(t => t.language === activeTrack.language);
-
-      let nextIndex;
-      if (direction === 'next') {
-        const currentIndex = sameLangTracks.findIndex(t => t.id === activeTrack.id);
-        nextIndex = (currentIndex + 1) % sameLangTracks.length;
-      } else {
-        const currentIndex = sameLangTracks.findIndex(t => t.id === activeTrack.id);
-        nextIndex = (currentIndex - 1 + sameLangTracks.length) % sameLangTracks.length;
+      // Se siamo in modalità Auto, passa al primo track manuale
+      if (isAutoResolution) {
+        isAutoResolution = false;
+        player.configure({ abr: { enabled: false } });
+        
+        // Seleziona il primo track disponibile
+        const firstTrack = tracks[0];
+        player.selectVariantTrack(firstTrack, true);
+        
+        const height = firstTrack.height || firstTrack.width || '?';
+        showOverlay(`🎬 ${height}p (MANUALE)`);
+        return;
       }
 
+      // Se siamo in manuale, cicla al prossimo track
+      const activeTrack = tracks.find(t => t.active);
+      if (!activeTrack) {
+        // Se nessun track è attivo, torna ad Auto
+        setAutoResolution();
+        return;
+      }
+
+      const sameLangTracks = tracks.filter(t => t.language === activeTrack.language);
+      const currentIndex = sameLangTracks.findIndex(t => t.id === activeTrack.id);
+      const nextIndex = (currentIndex + 1) % sameLangTracks.length;
       const nextTrack = sameLangTracks[nextIndex];
-      player.configure({ abr: { enabled: false } });
+
+      // Se siamo tornati al primo track dopo l'ultimo, torna ad Auto
+      if (nextIndex === 0 && currentIndex === sameLangTracks.length - 1) {
+        setAutoResolution();
+        return;
+      }
+
       player.selectVariantTrack(nextTrack, true);
-      showOverlay(`🎬 Risoluzione: ${nextTrack.height || nextTrack.width || 'Auto'}p`);
+      const height = nextTrack.height || nextTrack.width || '?';
+      showOverlay(`🎬 ${height}p (MANUALE)`);
     }
 
+    function setAutoResolution() {
+      isAutoResolution = true;
+      player.configure({ abr: { enabled: true } });
+      // Resetta la selezione manuale
+      const tracks = player.getVariantTracks();
+      const autoTrack = tracks.find(t => t.active);
+      if (!autoTrack && tracks.length > 0) {
+        player.selectVariantTrack(tracks[0], true);
+      }
+      showOverlay('📊 Risoluzione: AUTO');
+    }
+
+    // ===== ALTRE FUNZIONI =====
     function changeLanguage(direction = 'next') {
       if (!player) return;
 
@@ -313,142 +213,8 @@
       showOverlay(`📝 Sottotitoli: ${player.isTextTrackVisible() ? 'ON' : 'OFF'}`);
     }
 
-    function toggleTouchControls() {
-      touchControlsEnabled = !touchControlsEnabled;
-      touchControls.style.display = touchControlsEnabled ? 'block' : 'none';
-      touchToggle.style.opacity = touchControlsEnabled ? '1' : '0.7';
-      touchToggle.title = touchControlsEnabled ? 'Disattiva controlli touch' : 'Attiva controlli touch';
 
-      if (touchControlsEnabled) {
-        showOverlay('👆 Controlli touch ATTIVATI');
-      }
-    }
-
-    function setupTouchControls() {
-      const touchZones = document.querySelectorAll('.touch-zone');
-
-      touchZones.forEach(zone => {
-        zone.addEventListener('touchstart', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          zone.classList.add('active');
-
-          const action = zone.getAttribute('data-action');
-          let direction = 'next';
-
-          if (e.touches.length > 1 && (action === 'rewind' || action === 'forward')) {
-            direction = 'prev';
-          }
-
-          handleTouchAction(action, direction);
-
-          clearTimeout(touchTimer);
-          touchTimer = setTimeout(() => {
-            const interval = setInterval(() => {
-              handleTouchAction(action, direction);
-            }, 300);
-
-            const clearIntervalOnEnd = () => {
-              clearInterval(interval);
-              zone.removeEventListener('touchend', clearIntervalOnEnd);
-              zone.removeEventListener('touchcancel', clearIntervalOnEnd);
-            };
-
-            zone.addEventListener('touchend', clearIntervalOnEnd, { once: true });
-            zone.addEventListener('touchcancel', clearIntervalOnEnd, { once: true });
-          }, 500);
-        });
-
-        zone.addEventListener('touchend', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          zone.classList.remove('active');
-          clearTimeout(touchTimer);
-        });
-
-        zone.addEventListener('touchcancel', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          zone.classList.remove('active');
-          clearTimeout(touchTimer);
-        });
-
-        zone.addEventListener('touchmove', (e) => {
-          e.preventDefault();
-        });
-      });
-
-      touchToggle.addEventListener('click', toggleTouchControls);
-      touchToggle.addEventListener('touchstart', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        toggleTouchControls();
-      });
-    }
-
-    function handleTouchAction(action, direction = 'next') {
-      switch (action) {
-        case 'resolution':
-          changeResolution(direction);
-          break;
-        case 'language':
-          changeLanguage(direction);
-          break;
-        case 'rewind':
-          video.currentTime = Math.max(video.currentTime - 10, 0);
-          if (player && player.isLive()) {
-            const liveTime = getLiveTime();
-            if (liveTime) {
-              const behind = player.seekRange().end - video.currentTime;
-              const timeStr = formatLiveTime(liveTime);
-              showOverlay(`⏪ ${timeStr} (${formatTime(behind)} indietro)`);
-            } else {
-              showOverlay(`⏪ ${formatTime(video.currentTime)}`);
-            }
-          } else {
-            showOverlay(`⏪ ${formatTime(video.currentTime)}`);
-          }
-          break;
-        case 'forward':
-          const maxTime = player && player.isLive() ? player.seekRange().end : video.duration;
-          video.currentTime = Math.min(video.currentTime + 10, maxTime);
-          if (player && player.isLive()) {
-            const liveTime = getLiveTime();
-            if (liveTime) {
-              const behind = player.seekRange().end - video.currentTime;
-              const timeStr = formatLiveTime(liveTime);
-              showOverlay(`⏩ ${timeStr} (${formatTime(behind)} indietro)`);
-            } else {
-              showOverlay(`⏩ ${formatTime(video.currentTime)}`);
-            }
-          } else {
-            showOverlay(`⏩ ${formatTime(video.currentTime)}`);
-          }
-          break;
-      }
-    }
-
-    let lastTap = 0;
-    container.addEventListener('touchstart', (e) => {
-      const currentTime = new Date().getTime();
-      const tapLength = currentTime - lastTap;
-
-      if (tapLength < 300 && tapLength > 0 && e.touches.length === 1) {
-        const touch = e.touches[0];
-        const rect = container.getBoundingClientRect();
-        const centerX = rect.width / 2;
-        const centerY = rect.height / 2;
-
-        if (Math.abs(touch.clientX - (rect.left + centerX)) < 50 &&
-          Math.abs(touch.clientY - (rect.top + centerY)) < 50) {
-          e.preventDefault();
-          toggleSubtitles();
-        }
-      }
-
-      lastTap = currentTime;
-    });
-
+    // ===== INIT PLAYER =====
     async function initPlayer() {
       const urlParams = new URLSearchParams(window.location.search);
       const manifestUrl = urlParams.get("url");
@@ -472,7 +238,10 @@
         const keys = JSON.parse(decodeURIComponent(licenseKey));
         const clearKeys = {};
         keys.forEach(({ keyId, key }) => clearKeys[keyId] = key);
-        player.configure({ drm: { clearKeys } });
+        player.configure({ 
+          drm: { clearKeys },
+          abr: { enabled: true }
+        });
 
         await player.load(manifestUrl);
         video.play();
@@ -487,21 +256,19 @@
         console.error("Errore:", e);
       }
 
-      setupTouchControls();
+      
 
+      // ===== KEYBOARD CONTROLS =====
       document.addEventListener('keydown', (event) => {
         const key = event.key.toLowerCase();
 
         switch (key) {
           case 'enter':
-
-            // 🔥 Toggle pausa/play
             if (video.paused) {
               video.play();
             } else {
               video.pause();
             }
-
             if (player.isLive()) {
               const liveTime = getLiveTime();
               if (liveTime) {
@@ -522,6 +289,9 @@
             }
             break;
 
+          case 'arrowup':
+            cycleResolution();
+            break;
 
           case 'arrowleft':
             video.currentTime = Math.max(video.currentTime - 10, 0);
@@ -556,34 +326,25 @@
             }
             break;
 
-          case 'arrowup':
-            changeResolution('next');
-            break;
-
           case 'arrowdown':
             const textTracks = player.getTextTracks();
-
             if (textTracks.length === 0) {
               showOverlay('⚠️ Nessun sottotitolo disponibile');
               break;
             }
-
             const isVisible = player.isTextTrackVisible();
             const activeText = textTracks.find(t => t.active);
             const currentIdx = activeText ? textTracks.indexOf(activeText) : -1;
             const nextIdx = currentIdx + 1;
 
             if (!isVisible) {
-              // Accendi dal primo
               player.selectTextTrack(textTracks[0]);
               player.setTextTrackVisibility(true);
               showOverlay(`💬 ${textTracks[0].language?.toUpperCase() || 'Sub 1'}`);
             } else if (nextIdx < textTracks.length) {
-              // Passa al prossimo
               player.selectTextTrack(textTracks[nextIdx]);
               showOverlay(`💬 ${textTracks[nextIdx].language?.toUpperCase() || `Sub ${nextIdx + 1}`}`);
             } else {
-              // Hai ciclato tutti, spegni
               player.setTextTrackVisibility(false);
               showOverlay('💬 Sottotitoli: OFF');
             }
@@ -601,33 +362,14 @@
             toggleSubtitles();
             break;
 
-          case 't':
-            if (window.innerWidth <= 768) {
-              toggleTouchControls();
-            }
-            break;
+         
         }
-      });
-
-      document.addEventListener('keyup', (event) => {
-        const key = event.key.toLowerCase();
       });
     }
 
     document.addEventListener("DOMContentLoaded", initPlayer);
 
-    window.addEventListener('load', () => {
-      if (window.innerWidth <= 768) {
-        setTimeout(() => {
-          if (!touchControlsEnabled) {
-            touchControlsEnabled = true;
-            touchControls.style.display = 'block';
-            touchToggle.style.opacity = '1';
-            showOverlay('👆 Controlli touch disponibili');
-          }
-        }, 5000);
-      }
-    });
+   
   </script>
 </body>
 
