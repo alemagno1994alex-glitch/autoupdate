@@ -271,7 +271,7 @@ async function detailPage(type, id) {
   if (type === "tv" && d.seasons) app.append(buildEpisodes(d, id));
 
   const recs = (d.recommendations?.results || d.similar?.results || []).filter((r) => r.poster_path);
-  if (recs.length) app.append(rail("Consigliati", recs.map((r) => normalize({ ...r, media_type: r.media_type || type }))));
+  //if (recs.length) app.append(rail("Consigliati", recs.map((r) => normalize({ ...r, media_type: r.media_type || type }))));
 
   markAvailability(app);
 }
