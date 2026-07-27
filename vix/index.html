@@ -1,0 +1,76 @@
+
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#08090d" />
+  <title>NeroZone</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎬</text></svg>" />
+
+  <!-- rilevamento dispositivo: app nativa TV/mobile (via User-Agent) + touch -->
+  <script>
+    (function () {
+      var ua = navigator.userAgent || "";
+      var r = document.documentElement;
+      if (ua.indexOf("NovaTVApp/tv") >= 0) r.classList.add("native-app", "native-tv", "is-tv");
+      else if (ua.indexOf("NovaTVApp/mobile") >= 0) r.classList.add("native-app", "native-mobile");
+      if ("ontouchstart" in window || navigator.maxTouchPoints > 0) r.classList.add("is-touch");
+    })();
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- player HLS -->
+  <link href="https://vjs.zencdn.net/8.16.1/video-js.css" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/videojs-hls-quality-selector@2.0.0/dist/videojs-hls-quality-selector.min.css" />
+  <script src="https://vjs.zencdn.net/8.16.1/video.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/videojs-hls-quality-selector@2.0.0/dist/videojs-hls-quality-selector.min.js"></script>
+
+  <link rel="stylesheet" href="styles.css?v=3" />
+</head>
+<body>
+  <!-- barra superiore -->
+  <header class="topbar" id="header">
+    <a href="#/" class="brand">NeroZone</a>
+    <nav class="topnav">
+      <a class="nav-link" data-nav="home" href="#/">Home</a>
+      <a class="nav-link" data-nav="movies" href="#/movies">Film</a>
+      <a class="nav-link" data-nav="series" href="#/series">Serie&nbsp;TV</a>
+      <a class="nav-link" data-nav="list" href="#/list">La&nbsp;mia&nbsp;lista</a>
+    </nav>
+    <form class="search" id="search-form" role="search">
+      <span class="search-ic" aria-hidden="true">🔍</span>
+      <input id="search-input" type="search" autocomplete="off"
+             placeholder="Cerca film o serie…" aria-label="Cerca" />
+    </form>
+    <a class="search-btn" href="#/search" aria-label="Cerca">🔍</a>
+  </header>
+
+  <main id="app"></main>
+
+  <!-- barra inferiore (telefono / tablet) -->
+  <nav class="tabbar" aria-label="Navigazione">
+    <a class="tab" data-nav="home" href="#/">
+      <svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20h14V9.5"/></svg>
+      <span class="tab-tx">Home</span></a>
+    <a class="tab" data-nav="movies" href="#/movies">
+      <svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v5M16 4v5M8 20v-5M16 20v-5"/></svg>
+      <span class="tab-tx">Film</span></a>
+    <a class="tab" data-nav="series" href="#/series">
+      <svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="m8 3 4 4 4-4"/></svg>
+      <span class="tab-tx">Serie</span></a>
+    <a class="tab" data-nav="search" href="#/search">
+      <svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <span class="tab-tx">Cerca</span></a>
+    <a class="tab" data-nav="list" href="#/list">
+      <svg class="tab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7-4.5-9.3-9A5 5 0 0 1 12 6a5 5 0 0 1 9.3 5C19 15.5 12 20 12 20Z"/></svg>
+      <span class="tab-tx">Lista</span></a>
+  </nav>
+
+  <script type="module" src="app.js?v=2"></script>
+  <script type="module" src="tv.js?v=2"></script>
+</body>
+</html>
