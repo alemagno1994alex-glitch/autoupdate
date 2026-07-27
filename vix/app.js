@@ -75,47 +75,8 @@ function progressCard(p) {
 // ============================================================
 //  HOME
 // ============================================================
-route("/", async () => {
-  setActiveNav("home");
-  const rows = el("div", { class: "rows" },
-    skeletonRail("Tendenze"), skeletonRail("Film popolari"), skeletonRail("Serie popolari"));
-  app.replaceChildren(rows);
-
-  const [trending, popM, popT, now, topM, air] = await Promise.all([
-    api.getTrending().catch(() => []),
-    api.getPopularMovies().catch(() => []),
-    api.getPopularTV().catch(() => []),
-    api.getNowPlaying().catch(() => []),
-    api.getTopRatedMovies().catch(() => []),
-    api.getOnTheAir().catch(() => []),
-  ]);
-  const progress = store.getProgressAll();
-  const watchlist = store.getWatchlist();
-
-  //const heroItem = normalize(trending.find((t) => t.backdrop_path) || trending[0] || {});
-  //if (heroItem.id) app.insertBefore(buildHero(heroItem), rows);
-
-  rows.replaceChildren();
-  if (progress.length) rows.append(rail("Continua a guardare", progress.map(progressCard)));
-  if (watchlist.length) rows.append(rail("La mia lista", watchlist.map(wlCard), { moreHref: "#/list" }));
-  rows.append(
-    rail("Tendenze della settimana", trending.map(normalize)),
-    rail("Film popolari", popM.map(normalize), { moreHref: "#/movies" }),
-    rail("Serie popolari", popT.map(normalize), { moreHref: "#/series" }),
-    rail("Ora al cinema", now.map(normalize)),
-    rail("Serie del momento", air.map(normalize)),
-    rail("Film più votati", topM.map(normalize)));
-
-  const { GENRE_ROWS } = await import("./config.js");
-  const byGenre = await Promise.all(
-    GENRE_ROWS.map((g) => api.discover(g.type, { with_genres: g.id }).then((d) => d.results).catch(() => [])));
-  GENRE_ROWS.forEach((g, i) => {
-    if (byGenre[i].length)
-      rows.append(rail(`${g.name} • ${g.type === "tv" ? "Serie" : "Film"}`,
-        byGenre[i].map((it) => normalize({ ...it, media_type: g.type }))));
-  });
-
-  markAvailability(app);
+route("/", () => {
+  navigate("/movies");
 });
 
 function buildHero(it) {
