@@ -5,6 +5,7 @@ on:
     # Esegue alle 9:00 e 15:00 UTC (modifica a piacere)
     - cron: '0 9 * * *'
     - cron: '0 15 * * *'
+    - cron: '0 18 * * *'
   workflow_dispatch:   # permette esecuzione manuale
   push:
     branches: [ main ]

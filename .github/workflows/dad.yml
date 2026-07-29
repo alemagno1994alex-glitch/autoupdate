@@ -6,6 +6,7 @@ on:
    
     - cron: '0 7 * * *'   # 08:00 IT in inverno (07 UTC)
     - cron: '0 13 * * *'  # 14:00 IT in inverno (13 UTC)
+    - cron: '0 19 * * *'  # 14:00 IT in inverno (13 UTC)
   #
   Permette di eseguire manualmente il workflow dalla UI di GitHub
   workflow_dispatch:
