@@ -9,18 +9,13 @@ from datetime import datetime, timedelta
 from typing import List, Dict
 
 # ========================= CONFIGURAZIONE DA ENV =========================
+# Legge le variabili d'ambiente; se non presenti o vuote, usa i default
 SOURCE_URL = os.getenv("SOURCE_URL")
 if not SOURCE_URL:
     SOURCE_URL = "https://sportsonline.sl/prog.txt"
 
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-
-# Se GIST_ID non è in env, usa quello hardcoded (il tuo Gist)
 GIST_ID = os.getenv("GIST_ID")
-if not GIST_ID:
-    GIST_ID = "c222d5835ec193dd76410e20c8fbe362"
-    print("⚠️  GIST_ID non in env, uso quello di default")
-
 GIST_FILE = os.getenv("GIST_FILE")
 if not GIST_FILE:
     GIST_FILE = "sportsonline.m3u"
@@ -31,11 +26,11 @@ if not GIST_DESCRIPTION:
 
 PUBLIC_GIST = os.getenv("PUBLIC_GIST", "false").lower() == "true"
 
-# Controlli obbligatori (solo token)
+# Controlli obbligatori
 if not GITHUB_TOKEN:
     sys.exit("❌ GITHUB_TOKEN non impostato (o vuoto)")
-
-# ... il resto dello script rimane identico ...
+if not GIST_ID:
+    sys.exit("❌ GIST_ID non impostato (o vuoto)")
 
 # ========================= COSTANTI =========================
 WEEKDAYS = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"]
