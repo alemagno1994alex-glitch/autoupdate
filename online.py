@@ -9,20 +9,30 @@ from datetime import datetime, timedelta
 from typing import List, Dict
 
 # ========================= CONFIGURAZIONE DA ENV =========================
-SOURCE_URL = os.getenv("SOURCE_URL", "https://sportsonline.sl/prog.txt")
+# Legge le variabili d'ambiente; se non presenti o vuote, usa i default
+SOURCE_URL = os.getenv("SOURCE_URL")
+if not SOURCE_URL:
+    SOURCE_URL = "https://sportsonline.sl/prog.txt"
+
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 GIST_ID = os.getenv("GIST_ID")
-GIST_FILE = os.getenv("GIST_FILE", "sportsonline.m3u")
-GIST_DESCRIPTION = os.getenv("GIST_DESCRIPTION", "SPORTSONLINE M3U — ")
-PUBLIC_GIST = os.getenv("PUBLIC_GIST", "false").lower() == "true"   # default privato
+GIST_FILE = os.getenv("GIST_FILE")
+if not GIST_FILE:
+    GIST_FILE = "sportsonline.m3u"
+
+GIST_DESCRIPTION = os.getenv("GIST_DESCRIPTION")
+if not GIST_DESCRIPTION:
+    GIST_DESCRIPTION = "SPORTSONLINE M3U — "
+
+PUBLIC_GIST = os.getenv("PUBLIC_GIST", "false").lower() == "true"
 
 # Controlli obbligatori
 if not GITHUB_TOKEN:
-    sys.exit("❌ GITHUB_TOKEN non impostato")
+    sys.exit("❌ GITHUB_TOKEN non impostato (o vuoto)")
 if not GIST_ID:
-    sys.exit("❌ GIST_ID non impostato")
+    sys.exit("❌ GIST_ID non impostato (o vuoto)")
 
-# ========================= COSTANTI (come nel JS originale) =========================
+# ========================= COSTANTI =========================
 WEEKDAYS = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"]
 DAY_IT = {
     "MONDAY": "LUNEDÌ", "TUESDAY": "MARTEDÌ", "WEDNESDAY": "MERCOLEDÌ",
@@ -44,7 +54,6 @@ LOGO = {
     "br":   "https://raw.githubusercontent.com/nero081/loghi/main/loghi/brasile.png"
 }
 
-# ========================= UTILITY (identiche al JS) =========================
 def pad(n: int) -> str:
     return str(n).zfill(2)
 
@@ -102,12 +111,11 @@ def correggi_giorni(lines: List[str]) -> List[str]:
 
 def get_date_for_day(day_name: str, last_date: datetime) -> datetime:
     target = WEEKDAYS.index(day_name)
-    diff = target - last_date.weekday()   # Python: 0=Mon
+    diff = target - last_date.weekday()
     if diff <= 0:
         diff += 7
     return last_date + timedelta(days=diff)
 
-# ========================= PARSER =========================
 def parse_prog(text: str) -> List[Dict]:
     lines = correggi_giorni(text.splitlines())
     days = []
@@ -153,7 +161,6 @@ def parse_prog(text: str) -> List[Dict]:
             'events': cur_events
         })
 
-    # Assegna date mancanti
     d = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)
     for block in days:
         if block['date'] is None:
@@ -176,7 +183,6 @@ def build_m3u(parsed_days: List[Dict]) -> str:
             lines.append("")
     return "\n".join(lines)
 
-# ========================= GIST UPDATE =========================
 def update_gist(content: str, gist_id: str, token: str, filename: str, description: str, public: bool = False) -> dict:
     url = f"https://api.github.com/gists/{gist_id}"
     headers = {
@@ -196,7 +202,6 @@ def update_gist(content: str, gist_id: str, token: str, filename: str, descripti
     resp.raise_for_status()
     return resp.json()
 
-# ========================= MAIN =========================
 def main():
     print("🔄 Download di prog.txt...")
     try:
@@ -204,7 +209,7 @@ def main():
         resp.raise_for_status()
         text = resp.text
     except Exception as e:
-        sys.exit(f"❌ Errore nel download: {e}")
+        sys.exit(f"❌ Errore nel download da {SOURCE_URL}: {e}")
 
     print("🔄 Parsing del file...")
     try:

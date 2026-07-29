@@ -1,14 +1,13 @@
-name: Aggiorna Online su Gist
+name: Aggiorna online su Gist
 
 on:
   schedule:
-    # Esegue ogni giorno alle 6:00 UTC (modifica a piacere)
+    # Esegue alle 9:00 e 15:00 UTC (modifica a piacere)
     - cron: '0 9 * * *'
     - cron: '0 15 * * *'
-    
-  workflow_dispatch:   # permette l'esecuzione manuale
+  workflow_dispatch:   # permette esecuzione manuale
   push:
-    branches: [ main ] # opzionale: esegue anche al push su main
+    branches: [ main ]
 
 jobs:
   update-gist:
@@ -29,10 +28,10 @@ jobs:
 
       - name: Esegui script di aggiornamento
         env:
-          GITHUB_TOKEN: ${{ secrets.GIST_TOKEN }}      # Token con permessi gist
+          GITHUB_TOKEN: ${{ secrets.GIST_TOKEN }}
           GIST_ID: ${{ secrets.GIST_ID }}
-          SOURCE_URL: ${{ secrets.SOURCE_URL }}        # opzionale
-          GIST_FILE: ${{ secrets.GIST_FILE }}          # opzionale
-          GIST_DESCRIPTION: ${{ secrets.GIST_DESCRIPTION }} # opzionale
-          PUBLIC_GIST: ${{ secrets.PUBLIC_GIST }}      # 'true' o 'false'
+          SOURCE_URL: ${{ secrets.SOURCE_URL }}
+          GIST_FILE: ${{ secrets.GIST_FILE }}
+          GIST_DESCRIPTION: ${{ secrets.GIST_DESCRIPTION }}
+          PUBLIC_GIST: ${{ secrets.PUBLIC_GIST }}
         run: python online.py
