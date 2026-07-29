@@ -31,4 +31,4 @@ jobs:
           GIST_ID: ${{ secrets.GIST_ID }}           # ID del tuo Gist
           GIST_FILENAME: ${{ secrets.GIST_FILENAME || 'daddyeventi.m3u' }}
           OFFSET_HOURS: ${{ secrets.OFFSET_HOURS || '2' }}
-        run: python dad.py
+        run: python daddy.py
