@@ -1,36 +1,38 @@
-name: Aggiorna SportsOnline su Gist
+name: Aggiorna Online su Gist
 
 on:
-  # Esegui automaticamente ogni giorno alle 8:00 (UTC)
   schedule:
-   
-    - cron: '0 9 * * *'   # 10:00 IT in inverno (07 UTC)
-    - cron: '0 15 * * *'  # 16:00 IT in inverno (13 UTC)
-  #  Permette di eseguire manualmente il workflow dalla UI di GitHub
-  workflow_dispatch:
+    # Esegue ogni giorno alle 6:00 UTC (modifica a piacere)
+    - cron: '0 9 * * *'
+    - cron: '0 15 * * *'
+    
+  workflow_dispatch:   # permette l'esecuzione manuale
+  push:
+    branches: [ main ] # opzionale: esegue anche al push su main
 
 jobs:
-  update-m3u:
+  update-gist:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout del repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Imposta Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.10'
 
-      - name: Installa le dipendenze
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install requests
 
-      - name: Esegui lo script
+      - name: Esegui script di aggiornamento
         env:
-          GITHUB_TOKEN: ${{ secrets.GIST_TOKEN }}   # Token personale per i Gist
-          GIST_ID: ${{ secrets.GIST_ID }}           # ID del tuo Gist
-          GIST_FILENAME: ${{ secrets.GIST_FILENAME || 'sportsonline.m3u' }}
-          OFFSET_HOURS: ${{ secrets.OFFSET_HOURS || '2' }}
-        run: python daddy.py
+          GITHUB_TOKEN: ${{ secrets.GIST_TOKEN }}      # Token con permessi gist
+          GIST_ID: ${{ secrets.GIST_ID }}
+          SOURCE_URL: ${{ secrets.SOURCE_URL }}        # opzionale
+          GIST_FILE: ${{ secrets.GIST_FILE }}          # opzionale
+          GIST_DESCRIPTION: ${{ secrets.GIST_DESCRIPTION }} # opzionale
+          PUBLIC_GIST: ${{ secrets.PUBLIC_GIST }}      # 'true' o 'false'
+        run: python online.py
