@@ -3,9 +3,11 @@ name: Aggiorna online su Gist
 on:
   schedule:
     # Esegue alle 9:00 e 15:00 UTC (modifica a piacere)
-    - cron: '0 9 * * *'
-    - cron: '0 15 * * *'
-    - cron: '0 18 * * *'
+    - cron: '0 7 * * *'
+    - cron: '0 12 * * *'
+    - cron: '0 17 * * *'
+    - cron: '0 22 * * *'
+    
   workflow_dispatch:   # permette esecuzione manuale
   push:
     branches: [ main ]
