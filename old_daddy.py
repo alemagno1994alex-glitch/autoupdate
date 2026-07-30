@@ -2,16 +2,13 @@
 """
 M3U Generator – DLHD → Gist
 --------------------------------------------------
-Scarica il palinsesto da dlhd.st, filtra gli eventi di oggi,
-genera un file M3U e lo carica su un Gist di GitHub.
+Questo script scarica il palinsesto da dlhd.st, filtra gli eventi di oggi,
+genera un file M3U e lo carica su un Gist di GitHub tramite API.
 
 Le credenziali vanno fornite tramite variabili d'ambiente:
-    GITHUB_TOKEN       : token personale con permesso gist
-    GIST_ID            : ID del Gist di destinazione
-    GIST_FILENAME      : nome del file nel Gist (default: daddyeventi.m3u)
-    OFFSET_HOURS       : ore da aggiungere agli orari (default: 2)
-    EXCLUDED_CATEGORIES: categorie da escludere, separate da virgola
-                         (es. "Big Brother 👁️ 28 LIVE CAMERA FEEDS,TV Shows 📺")
+    GITHUB_TOKEN  : token personale con permesso gist
+    GIST_ID       : ID del Gist di destinazione
+    (opzionali) GIST_FILENAME, OFFSET_HOURS
 """
 
 import re
@@ -28,34 +25,19 @@ except ImportError:
     sys.exit(1)
 
 # ============================================================
-#  CONFIGURAZIONE (da variabili d'ambiente o valori predefiniti)
+#  CONFIGURAZIONE (solo da variabili d'ambiente)
 # ============================================================
 
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 GIST_ID = os.environ.get("GIST_ID")
 GIST_FILENAME = os.environ.get("GIST_FILENAME", "daddyeventi.m3u")
 OFFSET_HOURS = int(os.environ.get("OFFSET_HOURS", 2))
-
-# Categorie da escludere: se la variabile d'ambiente è impostata, la usa;
-# altrimenti usa la lista hardcoded qui sotto.
-excluded_env = os.environ.get("EXCLUDED_CATEGORIES", "")
-if excluded_env:
-    EXCLUDED_CATEGORIES = [cat.strip() for cat in excluded_env.split(",") if cat.strip()]
-else:
-    # Modifica questa lista con le categorie che vuoi escludere
-    EXCLUDED_CATEGORIES = [
-        "Big Brother 👁️ 28 LIVE CAMERA FEEDS",
-        "TV Shows 📺",
-		"Upcoming Events",
-		"WSOP 2026 ♠️🃏"
-    ]
-
 BASE_URL = "https://dlhd.st/"
 PROXY_URL = "https://proxy.alemagno1994alex.workers.dev/?url="
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 
 # ============================================================
-#  FUNZIONI
+#  FUNZIONI (invariate)
 # ============================================================
 
 def fetch_direct(url):
@@ -119,7 +101,6 @@ def generate_m3u(html):
 
     today = datetime.now().date()
     all_events = []
-    excluded_count = 0
 
     for day_el in day_elements:
         title_el = day_el.select_one(".schedule__dayTitle")
@@ -137,11 +118,6 @@ def generate_m3u(html):
             if not cat_title_el:
                 continue
             category = cat_title_el.get_text(strip=True)
-
-            # --- SALTARE LE CATEGORIE ESCLUSE ---
-            if category in EXCLUDED_CATEGORIES:
-                excluded_count += 1
-                continue
 
             event_headers = cat.select(".schedule__event")
             for ev in event_headers:
@@ -181,13 +157,9 @@ def generate_m3u(html):
                     "streams": streams
                 })
 
-    if excluded_count:
-        print(f"⚠️ Escluse {excluded_count} categorie (totale occorrenze) – elenco: {', '.join(EXCLUDED_CATEGORIES)}")
-
-    # Filtra per oggi
     selected = [e for e in all_events if e["is_today"]]
     if not selected:
-        print("⚠️ Nessun evento per oggi. Verranno inclusi tutti gli eventi disponibili.")
+        print("⚠️  Nessun evento per oggi. Verranno inclusi tutti gli eventi disponibili.")
         selected = all_events
 
     if not selected:
@@ -214,7 +186,7 @@ def generate_m3u(html):
         print("❌ Nessuno stream valido trovato.")
         return None
 
-    print(f"✅ Eventi inclusi: {total_events} · Stream totali: {total_streams}")
+    print(f"✅ Eventi: {total_events} · Stream: {total_streams}")
     return "\n".join(lines)
 
 def upload_to_gist(content, token, gist_id, filename):
