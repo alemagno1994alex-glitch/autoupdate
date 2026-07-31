@@ -207,7 +207,7 @@ def main():
     try:
         resp = requests.get(SOURCE_URL, timeout=30)
         resp.raise_for_status()
-        text = resp.text
+        text = resp.content.decode('utf-8')
     except Exception as e:
         sys.exit(f"❌ Errore nel download da {SOURCE_URL}: {e}")
 
