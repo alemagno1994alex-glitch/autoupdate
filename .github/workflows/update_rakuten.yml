@@ -23,15 +23,26 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install requests
-     
+
+      - name: Esegui script di aggiornamento
+        env:
+          CLASSIFICATION: it
+        run: python rakuten.py rakuten.m3u
+
       - name: Upload to private Gist
         env:
           GH_TOKEN: ${{ secrets.GIST_TOKEN }}
+          GIST_ID: ${{ secrets.GIST_ID }}
         run: |
-          if [ -z "${{ secrets.GIST_ID }}" ]; then
+          if [ -z "$GIST_ID" ]; then
             echo "❌ Secret GIST_ID non impostato"
             exit 1
           fi
-          echo "📤 Aggiornamento del Gist ${{ secrets.GIST_ID }}..."
-          gh gist edit "${{ secrets.GIST_ID }}" --filename rakuten.m3u rakuten.m3u
+          echo "📤 Aggiornamento del Gist $GIST_ID..."
+          CONTENT=$(jq -Rs . rakuten.m3u)
+          curl -X PATCH \
+            -H "Authorization: token $GH_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/gists/$GIST_ID \
+            -d "{\"files\":{\"rakuten.m3u\":{\"content\": $CONTENT}}}"
           echo "✅ Gist aggiornato con successo!"
