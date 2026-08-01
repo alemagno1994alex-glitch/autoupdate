@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-# rakuten.py
 
 import os
 import sys
-import traceback
 from typing import List
 from collections import namedtuple
 
 import requests
+from dotenv import load_dotenv
 
-# Channel definition
+load_dotenv()
+
 CHANNEL_FIELDS = [
     "id",
     "numerical_id",
@@ -19,10 +19,8 @@ CHANNEL_FIELDS = [
     "category",
     "language_ids",
 ]
-Channel = namedtuple("Channel", CHANNEL_FIELDS)
 
-# ⚠️ NON USARE dotenv in GitHub Actions ⚠️
-# Le variabili le passi con env: nel workflow
+Channel = namedtuple("Channel", CHANNEL_FIELDS)
 
 class Api:
     api_scheme = "https"
@@ -47,16 +45,6 @@ class Api:
     }
 
     @classmethod
-    def get_classification_id(cls):
-        cid = cls.classification_id.get(cls.language)
-        if cid is None:
-            raise ValueError(
-                f"Lingua/paese '{cls.language}' non supportata. "
-                f"Valori disponibili: {', '.join(cls.classification_id.keys())}"
-            )
-        return cid
-
-    @classmethod
     def get_all_live_channels(cls):
         all_channels = []
         page = 1
@@ -69,7 +57,7 @@ class Api:
                 "User_Agent": cls.user_agent,
             }
             query = {
-                "classification_id": cls.get_classification_id(),
+                "classification_id": cls.classification_id[cls.language],
                 "device_identifier": "web",
                 "locale": cls.language,
                 "market_code": cls.language,
@@ -77,7 +65,6 @@ class Api:
                 "per_page": per_page,
             }
             response = requests.get(cls.api_base_url + path, headers=headers, params=query)
-            response.raise_for_status()
             data = response.json()
             channels = data.get("data", [])
             if not channels:
@@ -98,13 +85,12 @@ class Api:
             "User_Agent": cls.user_agent,
         }
         query = {
-            "classification_id": cls.get_classification_id(),
+            "classification_id": cls.classification_id[cls.language],
             "device_identifier": "web",
             "locale": cls.language,
-            "market_code": cls.language,
+            "market_code": cls.language
         }
         response = requests.get(cls.api_base_url + path, headers=headers, params=query)
-        response.raise_for_status()
         return response.json()
 
     @classmethod
@@ -116,31 +102,29 @@ class Api:
             "User_Agent": cls.user_agent,
         }
         query = {
-            "classification_id": cls.get_classification_id(),
+            "classification_id": cls.classification_id[cls.language],
             "device_identifier": "web",
             "device_stream_audio_quality": "2.0",
             "device_stream_hdr_type": "NONE",
             "device_stream_video_quality": "FHD",
             "disable_dash_legacy_packages": False,
             "locale": cls.language,
-            "market_code": cls.language,
+            "market_code": cls.language
         }
-        audio_lang = channel.language_ids[0] if channel.language_ids else "MIS"
         data = {
-            "audio_language": audio_lang,
+            "audio_language": channel.language_ids[0] if channel.language_ids else "MIS",
             "audio_quality": "2.0",
-            "classification_id": cls.get_classification_id(),
+            "classification_id": cls.classification_id[cls.language],
             "content_id": channel.id,
             "content_type": "live_channels",
             "device_serial": "not implemented",
             "player": "web:HLS-NONE:NONE",
             "strict_video_quality": False,
             "subtitle_language": "MIS",
-            "video_type": "stream",
+            "video_type": "stream"
         }
         caller = session if session else requests
         response = caller.post(cls.api_base_url + path, headers=headers, params=query, json=data)
-        response.raise_for_status()
         return response.json()
 
 def map_channels_categories(api_response):
@@ -157,18 +141,12 @@ def map_channels_streams(channels: List[Channel]):
     ch_stream_map = {}
     for channel in channels:
         try:
-            stream_url = (
-                Api.get_live_streaming(channel, session)
-                .get("data", {})
-                .get("stream_infos", [None])[0]
-                .get("url", "# no_url")
-            )
-            if stream_url != "# no_url" and stream_url:
+            stream_url = Api.get_live_streaming(channel, session).get("data", {}).get("stream_infos", [None])[0].get("url", "# no_url")
+            if stream_url != "# no_url":
                 head, sep, _ = stream_url.partition('.m3u8')
                 stream_url = head + sep
             ch_stream_map[channel.id] = stream_url
-        except Exception as e:
-            print(f"⚠️  Errore per il canale '{channel.title}' ({channel.id}): {e}", file=sys.stderr)
+        except Exception:
             ch_stream_map[channel.id] = "# no_stream"
     return ch_stream_map
 
@@ -216,9 +194,4 @@ def main():
     return 0
 
 if __name__ == "__main__":
-    try:
-        sys.exit(main())
-    except Exception as e:
-        print(f"\n❌ ERRORE FATALE: {e}", file=sys.stderr)
-        traceback.print_exc()
-        sys.exit(1)
+    sys.exit(main())
