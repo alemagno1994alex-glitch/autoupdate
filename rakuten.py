@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# rakuten_m3u_generator.py
+# rakuten.py
 
 import os
 import sys
@@ -8,7 +8,6 @@ from typing import List
 from collections import namedtuple
 
 import requests
-from dotenv import load_dotenv
 
 # Channel definition
 CHANNEL_FIELDS = [
@@ -22,7 +21,8 @@ CHANNEL_FIELDS = [
 ]
 Channel = namedtuple("Channel", CHANNEL_FIELDS)
 
-load_dotenv()
+# ⚠️ NON USARE dotenv in GitHub Actions ⚠️
+# Le variabili le passi con env: nel workflow
 
 class Api:
     api_scheme = "https"
@@ -48,7 +48,6 @@ class Api:
 
     @classmethod
     def get_classification_id(cls):
-        """Restituisce l'ID di classificazione, lanciando un errore chiaro se non trovato."""
         cid = cls.classification_id.get(cls.language)
         if cid is None:
             raise ValueError(
@@ -126,7 +125,6 @@ class Api:
             "locale": cls.language,
             "market_code": cls.language,
         }
-        # Se non ci sono lingue, usiamo "MIS" (Multilingual)
         audio_lang = channel.language_ids[0] if channel.language_ids else "MIS"
         data = {
             "audio_language": audio_lang,
@@ -223,4 +221,4 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\n❌ ERRORE FATALE: {e}", file=sys.stderr)
         traceback.print_exc()
-        sys.exit(1)   # Exit code 1 per problemi di esecuzione
+        sys.exit(1)

@@ -2,9 +2,8 @@ name: Aggiorna playlist Rakuten TV su Gist
 
 on:
   schedule:
-    # Esegue alle 6:00 UTC (modifica a piacere)
     - cron: '0 6 * * *'
-  workflow_dispatch:   # permette esecuzione manuale
+  workflow_dispatch:
   push:
     branches: [ main ]
 
@@ -29,5 +28,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GIST_TOKEN }}
           GIST_ID: ${{ secrets.GIST_ID }}
-          CLASSIFICATION: it   # Puoi cambiare con es, fr, de, ecc.
+          CLASSIFICATION: it
         run: python rakuten.py rakuten.m3u
+
+      - name: Upload to private Gist
+        env:
+          GH_TOKEN: ${{ secrets.GIST_TOKEN }}
+        run: |
+          if [ -z "${{ secrets.GIST_ID }}" ]; then
+            echo "❌ Secret GIST_ID non impostato"
+            exit 1
+          fi
+          gh gist edit "${{ secrets.GIST_ID }}" -f rakuten.m3u
+          echo "✅ Gist aggiornato"
