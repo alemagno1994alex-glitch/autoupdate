@@ -84,13 +84,20 @@ def parse_day_title(text):
     if not match:
         return None
     day = int(match.group(2))
-    month_name = match.group(3)
+    month_name = match.group(3).lower()           # <-- ora in minuscolo
     year = int(match.group(4))
+
     month_map = {
-        "January": 1, "February": 2, "March": 3, "April": 4,
-        "May": 5, "June": 6, "July": 7, "August": 8,
-        "September": 9, "October": 10, "November": 11, "December": 12
+        # nomi completi (in minuscolo)
+        "january": 1, "february": 2, "march": 3, "april": 4,
+        "may": 5, "june": 6, "july": 7, "august": 8,
+        "september": 9, "october": 10, "november": 11, "december": 12,
+        # abbreviazioni a 3 lettere (in minuscolo)
+        "jan": 1, "feb": 2, "mar": 3, "apr": 4,
+        "may": 5, "jun": 6, "jul": 7, "aug": 8,
+        "sep": 9, "oct": 10, "nov": 11, "dec": 12
     }
+
     month = month_map.get(month_name)
     if month is None:
         return None
