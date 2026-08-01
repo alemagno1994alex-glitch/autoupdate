@@ -3,6 +3,7 @@
 
 import os
 import sys
+import traceback
 from typing import List
 from collections import namedtuple
 
@@ -21,7 +22,7 @@ CHANNEL_FIELDS = [
 ]
 Channel = namedtuple("Channel", CHANNEL_FIELDS)
 
-load_dotenv()  # utile per test locali
+load_dotenv()
 
 class Api:
     api_scheme = "https"
@@ -46,6 +47,17 @@ class Api:
     }
 
     @classmethod
+    def get_classification_id(cls):
+        """Restituisce l'ID di classificazione, lanciando un errore chiaro se non trovato."""
+        cid = cls.classification_id.get(cls.language)
+        if cid is None:
+            raise ValueError(
+                f"Lingua/paese '{cls.language}' non supportata. "
+                f"Valori disponibili: {', '.join(cls.classification_id.keys())}"
+            )
+        return cid
+
+    @classmethod
     def get_all_live_channels(cls):
         all_channels = []
         page = 1
@@ -58,7 +70,7 @@ class Api:
                 "User_Agent": cls.user_agent,
             }
             query = {
-                "classification_id": cls.classification_id[cls.language],
+                "classification_id": cls.get_classification_id(),
                 "device_identifier": "web",
                 "locale": cls.language,
                 "market_code": cls.language,
@@ -87,7 +99,7 @@ class Api:
             "User_Agent": cls.user_agent,
         }
         query = {
-            "classification_id": cls.classification_id[cls.language],
+            "classification_id": cls.get_classification_id(),
             "device_identifier": "web",
             "locale": cls.language,
             "market_code": cls.language,
@@ -105,7 +117,7 @@ class Api:
             "User_Agent": cls.user_agent,
         }
         query = {
-            "classification_id": cls.classification_id[cls.language],
+            "classification_id": cls.get_classification_id(),
             "device_identifier": "web",
             "device_stream_audio_quality": "2.0",
             "device_stream_hdr_type": "NONE",
@@ -114,10 +126,12 @@ class Api:
             "locale": cls.language,
             "market_code": cls.language,
         }
+        # Se non ci sono lingue, usiamo "MIS" (Multilingual)
+        audio_lang = channel.language_ids[0] if channel.language_ids else "MIS"
         data = {
-            "audio_language": channel.language_ids[0] if channel.language_ids else "MIS",
+            "audio_language": audio_lang,
             "audio_quality": "2.0",
-            "classification_id": cls.classification_id[cls.language],
+            "classification_id": cls.get_classification_id(),
             "content_id": channel.id,
             "content_type": "live_channels",
             "device_serial": "not implemented",
@@ -151,12 +165,12 @@ def map_channels_streams(channels: List[Channel]):
                 .get("stream_infos", [None])[0]
                 .get("url", "# no_url")
             )
-            if stream_url != "# no_url":
+            if stream_url != "# no_url" and stream_url:
                 head, sep, _ = stream_url.partition('.m3u8')
                 stream_url = head + sep
             ch_stream_map[channel.id] = stream_url
         except Exception as e:
-            print(f"Errore per il canale {channel.title} ({channel.id}): {e}", file=sys.stderr)
+            print(f"⚠️  Errore per il canale '{channel.title}' ({channel.id}): {e}", file=sys.stderr)
             ch_stream_map[channel.id] = "# no_stream"
     return ch_stream_map
 
@@ -204,4 +218,9 @@ def main():
     return 0
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except Exception as e:
+        print(f"\n❌ ERRORE FATALE: {e}", file=sys.stderr)
+        traceback.print_exc()
+        sys.exit(1)   # Exit code 1 per problemi di esecuzione

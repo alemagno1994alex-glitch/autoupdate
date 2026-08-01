@@ -25,24 +25,27 @@ jobs:
 
       - name: Generate M3U playlist
         env:
-          CLASSIFICATION: it    # modifica il paese se necessario
+          CLASSIFICATION: it   # Cambia con il paese desiderato (es. es, fr, de, ...)
         run: python rakuten_m3u_generator.py rakuten.m3u
 
-      - name: Update private Gist
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GIST_TOKEN }}
-          script: |
-            const fs = require('fs');
-            const content = fs.readFileSync('rakuten.m3u', 'utf8');
-            const gistId = process.env.GIST_ID;
-            await github.rest.gists.update({
-              gist_id: gistId,
-              files: {
-                'rakuten.m3u': {
-                  content: content
-                }
-              }
-            });
+      - name: Verify generated file
+        run: |
+          if [ ! -f rakuten.m3u ]; then
+            echo "❌ Errore: file rakuten.m3u non generato!"
+            exit 1
+          fi
+          echo "✅ File generato correttamente. Dimensioni: $(wc -c < rakuten.m3u) bytes"
+
+      - name: Upload to private Gist using gh
         env:
-          GIST_ID: ${{ secrets.GIST_ID }}
+          GH_TOKEN: ${{ secrets.GIST_TOKEN }}
+        run: |
+          # Controllo che il secret GIST_ID sia impostato
+          if [ -z "${{ secrets.GIST_ID }}" ]; then
+            echo "❌ Errore: il secret GIST_ID non è impostato nelle Actions secrets."
+            exit 1
+          fi
+          
+          echo "📤 Aggiornamento del Gist ${{ secrets.GIST_ID }}..."
+          gh gist edit "${{ secrets.GIST_ID }}" -f rakuten.m3u
+          echo "✅ Gist aggiornato con successo!"
