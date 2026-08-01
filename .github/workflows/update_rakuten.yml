@@ -1,51 +1,33 @@
-name: Aggiorna playlist Rakuten
+name: Aggiorna playlist Rakuten TV su Gist
 
 on:
   schedule:
-    - cron: '0 6 * * *'      # ogni giorno alle 6:00 UTC
+    # Esegue alle 6:00 UTC (modifica a piacere)
+    - cron: '0 6 * * *'
+  workflow_dispatch:   # permette esecuzione manuale
   push:
     branches: [ main ]
-  workflow_dispatch:         # esecuzione manuale
 
 jobs:
-  generate:
+  update-gist:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
-
-      - name: Generate M3U playlist
-        env:
-          CLASSIFICATION: it   # Cambia con il paese desiderato (es. es, fr, de, ...)
-        run: python rakuten.py
-
-      - name: Verify generated file
         run: |
-          if [ ! -f rakuten.m3u ]; then
-            echo "❌ Errore: file rakuten.m3u non generato!"
-            exit 1
-          fi
-          echo "✅ File generato correttamente. Dimensioni: $(wc -c < rakuten.m3u) bytes"
+          python -m pip install --upgrade pip
+          pip install requests
 
-      - name: Upload to private Gist using gh
+      - name: Esegui script di aggiornamento
         env:
-          GH_TOKEN: ${{ secrets.GIST_TOKEN }}
-        run: |
-          # Controllo che il secret GIST_ID sia impostato
-          if [ -z "${{ secrets.GIST_ID }}" ]; then
-            echo "❌ Errore: il secret GIST_ID non è impostato nelle Actions secrets."
-            exit 1
-          fi
-          
-          echo "📤 Aggiornamento del Gist ${{ secrets.GIST_ID }}..."
-          gh gist edit "${{ secrets.GIST_ID }}" -f rakuten.m3u
-          echo "✅ Gist aggiornato con successo!"
+          GITHUB_TOKEN: ${{ secrets.GIST_TOKEN }}
+          GIST_ID: ${{ secrets.GIST_ID }}
+          CLASSIFICATION: it   # Puoi cambiare con es, fr, de, ecc.
+        run: python rakuten.py rakuten.m3u
