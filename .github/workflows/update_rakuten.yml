@@ -26,7 +26,7 @@ jobs:
       - name: Generate M3U playlist
         env:
           CLASSIFICATION: it   # Cambia con il paese desiderato (es. es, fr, de, ...)
-        run: python rakuten_m3u_generator.py rakuten.m3u
+        run: python rakuten.py
 
       - name: Verify generated file
         run: |
