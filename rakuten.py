@@ -2,6 +2,7 @@
 
 import os
 import sys
+import time
 from typing import List
 from collections import namedtuple
 
@@ -64,21 +65,17 @@ class Api:
                 "page": page,
                 "per_page": per_page,
             }
-            try:
-                response = requests.get(cls.api_base_url + path, headers=headers, params=query, timeout=30)
-                response.raise_for_status()
-                data = response.json()
-                channels = data.get("data", [])
-                if not channels:
-                    break
-                all_channels.extend(channels)
-                total = data.get("total", 0)
-                if total and len(all_channels) >= total:
-                    break
-                page += 1
-            except Exception as e:
-                print(f"   ❌ Errore al recupero dei canali (pagina {page}): {e}")
+            response = requests.get(cls.api_base_url + path, headers=headers, params=query, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+            channels = data.get("data", [])
+            if not channels:
                 break
+            all_channels.extend(channels)
+            total = data.get("total", 0)
+            if total and len(all_channels) >= total:
+                break
+            page += 1
         return {"data": all_channels}
 
     @classmethod
@@ -95,16 +92,17 @@ class Api:
             "locale": cls.language,
             "market_code": cls.language
         }
-        try:
-            response = requests.get(cls.api_base_url + path, headers=headers, params=query, timeout=30)
-            response.raise_for_status()
-            return response.json()
-        except Exception as e:
-            print(f"   ❌ Errore al recupero categorie: {e}")
-            return {"data": []}
+        response = requests.get(cls.api_base_url + path, headers=headers, params=query, timeout=30)
+        response.raise_for_status()
+        return response.json()
 
     @classmethod
     def get_live_streaming(cls, channel: Channel, session: requests.Session = None):
+        """
+        Recupera lo stream di un canale.
+        
+        Se ritorna 422, prova con audio_language diverso.
+        """
         path = "/avod/streamings"
         headers = {
             "Origin": cls.origin,
@@ -121,22 +119,66 @@ class Api:
             "locale": cls.language,
             "market_code": cls.language
         }
-        data = {
-            "audio_language": channel.language_ids[0] if channel.language_ids else "MIS",
-            "audio_quality": "2.0",
-            "classification_id": cls.classification_id[cls.language],
-            "content_id": channel.id,
-            "content_type": "live_channels",
-            "device_serial": "not implemented",
-            "player": "web:HLS-NONE:NONE",
-            "strict_video_quality": False,
-            "subtitle_language": "MIS",
-            "video_type": "stream"
-        }
-        caller = session if session else requests
-        response = caller.post(cls.api_base_url + path, headers=headers, params=query, json=data, timeout=30)
-        response.raise_for_status()
-        return response.json()
+        
+        # Prova prima con la lingua del canale
+        audio_languages_to_try = []
+        
+        if channel.language_ids:
+            audio_languages_to_try.extend(channel.language_ids)
+        
+        # Aggiungi fallback
+        audio_languages_to_try.extend(["MIS", "ENG", "ITA"])
+        
+        # Rimuovi duplicati mantenendo l'ordine
+        audio_languages_to_try = list(dict.fromkeys(audio_languages_to_try))
+        
+        last_error = None
+        
+        for audio_lang in audio_languages_to_try:
+            data = {
+                "audio_language": audio_lang,
+                "audio_quality": "2.0",
+                "classification_id": cls.classification_id[cls.language],
+                "content_id": channel.id,
+                "content_type": "live_channels",
+                "device_serial": "not implemented",
+                "player": "web:HLS-NONE:NONE",
+                "strict_video_quality": False,
+                "subtitle_language": "MIS",
+                "video_type": "stream"
+            }
+            
+            try:
+                caller = session if session else requests
+                response = caller.post(
+                    cls.api_base_url + path,
+                    headers=headers,
+                    params=query,
+                    json=data,
+                    timeout=30
+                )
+                
+                if response.status_code == 200:
+                    return response.json()
+                elif response.status_code == 422:
+                    # Prova la prossima lingua
+                    last_error = response
+                    continue
+                else:
+                    response.raise_for_status()
+                    
+            except Exception as e:
+                last_error = e
+                continue
+        
+        # Se arriviamo qui, nessuna richiesta è andata a buon fine
+        if last_error:
+            if isinstance(last_error, requests.Response):
+                raise requests.HTTPError(f"422 on all audio languages", response=last_error)
+            else:
+                raise last_error
+        
+        raise Exception("No audio language worked")
 
 def map_channels_categories(api_response):
     categories = api_response.get("data", [])
@@ -166,23 +208,22 @@ def map_channels_streams(channels: List[Channel]):
                 stream_url = head + sep
                 ch_stream_map[channel.id] = stream_url
                 success_count += 1
-                # Mostra ogni 10 canali
-                if idx % 10 == 0 or idx == total:
-                    print(f"   [{idx}/{total}] Stream recuperati: {success_count}, Errori: {error_count}")
             else:
                 ch_stream_map[channel.id] = "# no_stream"
                 error_count += 1
         except Exception as e:
             ch_stream_map[channel.id] = "# no_stream"
             error_count += 1
-            # Se è un errore nuovo, mostralo
-            if error_count <= 3:
-                error_type = type(e).__name__
-                error_msg = str(e)[:50]
-                print(f"   ⚠️  Errore su '{channel.title[:30]}': {error_type} - {error_msg}")
+        
+        # Mostra progressione ogni 10 canali
+        if idx % 10 == 0 or idx == total:
+            print(f"   [{idx}/{total}] OK: {success_count}, Errori: {error_count}")
+        
+        # Piccolo delay per evitare rate limiting
+        time.sleep(0.1)
     
     session.close()
-    print(f"   ✅ Completato: {success_count}/{total} stream recuperati, {error_count} errori")
+    print(f"   ✅ Completato: {success_count}/{total} stream recuperati")
     return ch_stream_map
 
 def get_channels() -> List[Channel]:
@@ -217,52 +258,21 @@ def generate_list(channels: List[Channel]) -> str:
 
 def main():
     output_file = sys.argv[1] if len(sys.argv) > 1 else "rakuten.m3u"
-    
-    print("\n" + "=" * 60)
-    print("RAKUTEN PLAYLIST GENERATOR")
-    print("=" * 60)
-    print(f"User-Agent: {Api.user_agent}")
-    print(f"Language: {Api.language}")
-    print(f"Output: {output_file}")
-    print("=" * 60 + "\n")
-    
     print("⏳ Recupero dei canali...")
     channels = get_channels()
-    print(f"   ✓ Trovati {len(channels)} canali\n")
-    
+    print(f"   ✓ Trovati {len(channels)} canali")
     print("⏳ Generazione playlist e recupero stream...")
     m3u_content = generate_list(channels)
-    
     with open(output_file, "w", encoding="utf-8") as f:
         f.write(m3u_content)
     
-    # Statistiche
-    total_extinf = m3u_content.count('#EXTINF')
-    no_stream = m3u_content.count('# no_stream')
-    valid_streams = total_extinf - no_stream
+    total = m3u_content.count('#EXTINF')
+    valid = total - m3u_content.count('# no_stream')
     
-    print("\n" + "=" * 60)
-    print("RISULTATI")
-    print("=" * 60)
-    print(f"✅ Playlist salvata: {output_file}")
-    print(f"   - Canali totali: {total_extinf}")
-    print(f"   - Stream validi: {valid_streams}")
-    print(f"   - Senza stream: {no_stream}")
-    
-    if valid_streams == 0:
-        print("\n⚠️  ATTENZIONE: Nessuno stream trovato!")
-        print("   Possibili cause:")
-        print("   1. L'API ritorna canali ma non stream")
-        print("   2. I canali sono VOD, non LIVE")
-        print("   3. IP bloccato da Rakuten")
-    elif valid_streams < total_extinf * 0.5:
-        print(f"\n⚠️  ATTENZIONE: Solo il {(valid_streams/total_extinf)*100:.1f}% di stream trovati")
-    else:
-        print("\n✅ Generazione completata con successo!")
-    
-    print("=" * 60 + "\n")
-    
-    return 0 if valid_streams > 0 else 1
+    print(f"✅ Playlist salvata in: {output_file}")
+    print(f"   Canali totali: {total}")
+    print(f"   Stream validi: {valid}")
+    return 0
 
 if __name__ == "__main__":
     sys.exit(main())
