@@ -1,0 +1,45 @@
+name: GitHub Actions Demo
+on:
+  schedule:
+    - cron: "0 */12 * * *"
+  workflow_dispatch:
+    inputs:
+      debug_enabled:
+        description: 'Run the build with tmate debugging enabled'
+        required: false
+        default: False
+jobs:
+  generate-m3u:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v3
+        with:
+          python-version: "3.9"
+
+      - name: Install requirements
+        run: pip install -r requirements.txt
+
+      - name: Create output directory
+        run: mkdir -p ./output
+
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}
+
+      - name: Generate m3u list
+        run: python main.py > ./output/rakuten.m3u
+        env:
+          HTTP_PROXY: http://${{ secrets.PROXY_USERNAME }}:${{ secrets.PROXY_PASSWORD }}@${{ secrets.PROXY_IP }}:5009
+          HTTPS_PROXY: http://${{ secrets.PROXY_USERNAME }}:${{ secrets.PROXY_PASSWORD }}@${{ secrets.PROXY_IP }}:5009
+
+      - name: Add updated list to repository
+        uses: EndBug/add-and-commit@v9
+        with:
+          default_author: github_actions
+          message: Add/update list
+          add: '*.m3u --force'
+          cwd: './output/'
