@@ -2,7 +2,6 @@ name: Aggiorna playlist Rakuten
 
 on:
   schedule:
-    # Esegui ogni giorno alle 6:00 (UTC)
     - cron: '0 6 * * *'
   workflow_dispatch:
   push:
@@ -28,22 +27,56 @@ jobs:
           pip install requests python-dotenv
           echo "✓ Dipendenze installate"
 
+      - name: Verifica file rakuten.py
+        run: |
+          echo "========================================"
+          echo "Verifica User-Agent nel file"
+          echo "========================================"
+          grep -n "user_agent" rakuten.py | head -5
+          echo ""
+          if grep -q "Firefox/128" rakuten.py; then
+            echo "✅ User-Agent CORRETTO (Firefox/128)"
+          elif grep -q "Firefox/98" rakuten.py; then
+            echo "❌ User-Agent VECCHIO (Firefox/98)"
+          else
+            echo "❓ User-Agent sconosciuto"
+          fi
+
       - name: Genera playlist
         env:
           CLASSIFICATION: it
         run: |
-          echo "Inizio generazione playlist..."
-          python rakuten.py rakuten.m3u
-          echo "Playlist generata con successo"
-          
-          # Verifica il file
+          echo "========================================"
+          echo "Inizio generazione playlist"
+          echo "========================================"
+          python rakuten.py rakuten.m3u 2>&1
+          echo ""
+          echo "========================================"
+          echo "Verifica file generato"
+          echo "========================================"
           if [ -f rakuten.m3u ]; then
+            SIZE=$(wc -c < rakuten.m3u)
+            CHANNELS=$(grep -c '#EXTINF' rakuten.m3u || echo 0)
+            STREAMS=$(grep -c "http" rakuten.m3u || echo 0)
+            NOSTREAM=$(grep -c "# no_stream" rakuten.m3u || echo 0)
+            
             echo "✓ File creato"
-            echo "Dimensione: $(wc -c < rakuten.m3u) bytes"
-            echo "Numero di canali: $(grep -c '#EXTINF' rakuten.m3u)"
-            echo "Stream disponibili: $(grep -v '# no_stream' rakuten.m3u | grep -c 'http')"
+            echo "  - Dimensione: $SIZE bytes"
+            echo "  - Canali totali: $CHANNELS"
+            echo "  - Stream validi: $STREAMS"
+            echo "  - Senza stream (# no_stream): $NOSTREAM"
+            echo ""
+            echo "========================================"
+            echo "Primi 20 righe del file:"
+            echo "========================================"
+            head -20 rakuten.m3u
+            echo ""
+            echo "========================================"
+            echo "Ultimi 20 righe del file:"
+            echo "========================================"
+            tail -20 rakuten.m3u
           else
-            echo "✗ Errore: File non creato"
+            echo "❌ Errore: File non creato"
             exit 1
           fi
 
@@ -76,9 +109,8 @@ jobs:
           
           if [ "$HTTP_CODE" = "200" ]; then
             echo "✓ Upload su Gist completato (HTTP $HTTP_CODE)"
-            echo "URL: https://gist.githubusercontent.com/$(echo $BODY | jq -r '.owner.login')/$(echo $BODY | jq -r '.id')/raw"
           else
-            echo "✗ Errore upload (HTTP $HTTP_CODE)"
+            echo "❌ Errore upload (HTTP $HTTP_CODE)"
             echo "$BODY"
             exit 1
           fi

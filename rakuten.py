@@ -30,9 +30,6 @@ class Api:
 
     origin = "https://rakuten.tv"
     referer = "https://rakuten.tv/"
-    # ⚠️ IMPORTANTE: Rakuten blocca User-Agent vecchi
-    # Firefox/98 → 403 Forbidden
-    # Firefox/128+ → 200 OK ✓
     user_agent = "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0"
 
     language = os.getenv('CLASSIFICATION', 'it')
@@ -67,17 +64,21 @@ class Api:
                 "page": page,
                 "per_page": per_page,
             }
-            response = requests.get(cls.api_base_url + path, headers=headers, params=query, timeout=30)
-            response.raise_for_status()
-            data = response.json()
-            channels = data.get("data", [])
-            if not channels:
+            try:
+                response = requests.get(cls.api_base_url + path, headers=headers, params=query, timeout=30)
+                response.raise_for_status()
+                data = response.json()
+                channels = data.get("data", [])
+                if not channels:
+                    break
+                all_channels.extend(channels)
+                total = data.get("total", 0)
+                if total and len(all_channels) >= total:
+                    break
+                page += 1
+            except Exception as e:
+                print(f"   ❌ Errore al recupero dei canali (pagina {page}): {e}")
                 break
-            all_channels.extend(channels)
-            total = data.get("total", 0)
-            if total and len(all_channels) >= total:
-                break
-            page += 1
         return {"data": all_channels}
 
     @classmethod
@@ -94,9 +95,13 @@ class Api:
             "locale": cls.language,
             "market_code": cls.language
         }
-        response = requests.get(cls.api_base_url + path, headers=headers, params=query, timeout=30)
-        response.raise_for_status()
-        return response.json()
+        try:
+            response = requests.get(cls.api_base_url + path, headers=headers, params=query, timeout=30)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            print(f"   ❌ Errore al recupero categorie: {e}")
+            return {"data": []}
 
     @classmethod
     def get_live_streaming(cls, channel: Channel, session: requests.Session = None):
@@ -147,27 +152,37 @@ def map_channels_streams(channels: List[Channel]):
     ch_stream_map = {}
     total = len(channels)
     
+    success_count = 0
+    error_count = 0
+    
     for idx, channel in enumerate(channels, 1):
-        print(f"  [{idx}/{total}] {channel.title}...", end="", flush=True)
         try:
             stream_response = Api.get_live_streaming(channel, session)
-            stream_url = stream_response.get("data", {}).get("stream_infos", [None])[0]
+            stream_info = stream_response.get("data", {}).get("stream_infos", [None])[0]
             
-            if stream_url and stream_url.get("url"):
-                url = stream_url.get("url", "")
-                # Estrai solo l'URL base (fino a .m3u8)
+            if stream_info and stream_info.get("url"):
+                url = stream_info.get("url", "")
                 head, sep, _ = url.partition('.m3u8')
                 stream_url = head + sep
                 ch_stream_map[channel.id] = stream_url
-                print(" ✓")
+                success_count += 1
+                # Mostra ogni 10 canali
+                if idx % 10 == 0 or idx == total:
+                    print(f"   [{idx}/{total}] Stream recuperati: {success_count}, Errori: {error_count}")
             else:
                 ch_stream_map[channel.id] = "# no_stream"
-                print(" ✗ (no stream)")
+                error_count += 1
         except Exception as e:
             ch_stream_map[channel.id] = "# no_stream"
-            print(f" ✗ ({type(e).__name__})")
+            error_count += 1
+            # Se è un errore nuovo, mostralo
+            if error_count <= 3:
+                error_type = type(e).__name__
+                error_msg = str(e)[:50]
+                print(f"   ⚠️  Errore su '{channel.title[:30]}': {error_type} - {error_msg}")
     
     session.close()
+    print(f"   ✅ Completato: {success_count}/{total} stream recuperati, {error_count} errori")
     return ch_stream_map
 
 def get_channels() -> List[Channel]:
@@ -202,16 +217,52 @@ def generate_list(channels: List[Channel]) -> str:
 
 def main():
     output_file = sys.argv[1] if len(sys.argv) > 1 else "rakuten.m3u"
+    
+    print("\n" + "=" * 60)
+    print("RAKUTEN PLAYLIST GENERATOR")
+    print("=" * 60)
+    print(f"User-Agent: {Api.user_agent}")
+    print(f"Language: {Api.language}")
+    print(f"Output: {output_file}")
+    print("=" * 60 + "\n")
+    
     print("⏳ Recupero dei canali...")
     channels = get_channels()
-    print(f"   ✓ Trovati {len(channels)} canali")
+    print(f"   ✓ Trovati {len(channels)} canali\n")
+    
     print("⏳ Generazione playlist e recupero stream...")
     m3u_content = generate_list(channels)
+    
     with open(output_file, "w", encoding="utf-8") as f:
         f.write(m3u_content)
-    print(f"✅ Playlist salvata in: {output_file}")
-    print(f"   Canali totali: {m3u_content.count('#EXTINF')}")
-    return 0
+    
+    # Statistiche
+    total_extinf = m3u_content.count('#EXTINF')
+    no_stream = m3u_content.count('# no_stream')
+    valid_streams = total_extinf - no_stream
+    
+    print("\n" + "=" * 60)
+    print("RISULTATI")
+    print("=" * 60)
+    print(f"✅ Playlist salvata: {output_file}")
+    print(f"   - Canali totali: {total_extinf}")
+    print(f"   - Stream validi: {valid_streams}")
+    print(f"   - Senza stream: {no_stream}")
+    
+    if valid_streams == 0:
+        print("\n⚠️  ATTENZIONE: Nessuno stream trovato!")
+        print("   Possibili cause:")
+        print("   1. L'API ritorna canali ma non stream")
+        print("   2. I canali sono VOD, non LIVE")
+        print("   3. IP bloccato da Rakuten")
+    elif valid_streams < total_extinf * 0.5:
+        print(f"\n⚠️  ATTENZIONE: Solo il {(valid_streams/total_extinf)*100:.1f}% di stream trovati")
+    else:
+        print("\n✅ Generazione completata con successo!")
+    
+    print("=" * 60 + "\n")
+    
+    return 0 if valid_streams > 0 else 1
 
 if __name__ == "__main__":
     sys.exit(main())
