@@ -2,10 +2,10 @@ name: Aggiorna playlist Rakuten
 
 on:
   schedule:
-    - cron: '0 6 * * *'   # ogni giorno alle 6:00 UTC
+    - cron: '0 6 * * *'      # ogni giorno alle 6:00 UTC
   push:
     branches: [ main ]
-  workflow_dispatch:       # permette esecuzione manuale
+  workflow_dispatch:         # esecuzione manuale
 
 jobs:
   generate:
@@ -25,14 +25,24 @@ jobs:
 
       - name: Generate M3U playlist
         env:
-          CLASSIFICATION: it   # modifica con il paese desiderato (es. it, es, fr, ...)
+          CLASSIFICATION: it    # modifica il paese se necessario
         run: python rakuten_m3u_generator.py rakuten.m3u
 
-      - name: Upload to private Gist
-        uses: andymckay/publish-gist@v1
+      - name: Update private Gist
+        uses: actions/github-script@v7
         with:
-          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+          github-token: ${{ secrets.GIST_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const content = fs.readFileSync('rakuten.m3u', 'utf8');
+            const gistId = process.env.GIST_ID;
+            await github.rest.gists.update({
+              gist_id: gistId,
+              files: {
+                'rakuten.m3u': {
+                  content: content
+                }
+              }
+            });
+        env:
           GIST_ID: ${{ secrets.GIST_ID }}
-          GIST_FILENAME: rakuten.m3u
-          # Il contenuto del file locale verrà letto e inviato al Gist
-          file_path: rakuten.m3u
