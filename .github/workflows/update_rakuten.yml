@@ -1,0 +1,38 @@
+name: Aggiorna playlist Rakuten
+
+on:
+  schedule:
+    - cron: '0 6 * * *'   # ogni giorno alle 6:00 UTC
+  push:
+    branches: [ main ]
+  workflow_dispatch:       # permette esecuzione manuale
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate M3U playlist
+        env:
+          CLASSIFICATION: it   # modifica con il paese desiderato (es. it, es, fr, ...)
+        run: python rakuten_m3u_generator.py rakuten.m3u
+
+      - name: Upload to private Gist
+        uses: andymckay/publish-gist@v1
+        with:
+          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+          GIST_ID: ${{ secrets.GIST_ID }}
+          GIST_FILENAME: rakuten.m3u
+          # Il contenuto del file locale verrà letto e inviato al Gist
+          file_path: rakuten.m3u
