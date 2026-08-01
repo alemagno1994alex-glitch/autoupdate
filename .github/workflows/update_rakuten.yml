@@ -2,6 +2,7 @@ name: Aggiorna playlist Rakuten
 
 on:
   schedule:
+    # Esegui ogni giorno alle 6:00 (UTC)
     - cron: '0 6 * * *'
   workflow_dispatch:
   push:
@@ -10,6 +11,8 @@ on:
 jobs:
   update:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -21,21 +24,67 @@ jobs:
 
       - name: Installa dipendenze
         run: |
+          pip install --upgrade pip
           pip install requests python-dotenv
+          echo "✓ Dipendenze installate"
 
       - name: Genera playlist
         env:
           CLASSIFICATION: it
-        run: python rakuten.py rakuten.m3u
+        run: |
+          echo "Inizio generazione playlist..."
+          python rakuten.py rakuten.m3u
+          echo "Playlist generata con successo"
+          
+          # Verifica il file
+          if [ -f rakuten.m3u ]; then
+            echo "✓ File creato"
+            echo "Dimensione: $(wc -c < rakuten.m3u) bytes"
+            echo "Numero di canali: $(grep -c '#EXTINF' rakuten.m3u)"
+            echo "Stream disponibili: $(grep -v '# no_stream' rakuten.m3u | grep -c 'http')"
+          else
+            echo "✗ Errore: File non creato"
+            exit 1
+          fi
 
       - name: Carica su Gist
+        if: success()
         env:
           GH_TOKEN: ${{ secrets.GIST_TOKEN }}
           GIST_ID: ${{ secrets.GIST_ID }}
         run: |
+          if [ -z "$GH_TOKEN" ] || [ -z "$GIST_ID" ]; then
+            echo "⚠️  Variabili di ambiente non configurate, skip upload"
+            exit 0
+          fi
+
+          echo "Upload della playlist su Gist..."
+          
+          # Leggi il file e codificalo in JSON
           CONTENT=$(jq -Rs . rakuten.m3u)
-          curl -X PATCH \
+          
+          # Effettua il PATCH al Gist
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X PATCH \
             -H "Authorization: token $GH_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
+            -H "Content-Type: application/json" \
             https://api.github.com/gists/$GIST_ID \
-            -d "{\"files\":{\"rakuten.m3u\":{\"content\": $CONTENT}}}"
+            -d "{\"files\":{\"rakuten.m3u\":{\"content\": $CONTENT}}}")
+          
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n-1)
+          
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✓ Upload su Gist completato (HTTP $HTTP_CODE)"
+            echo "URL: https://gist.githubusercontent.com/$(echo $BODY | jq -r '.owner.login')/$(echo $BODY | jq -r '.id')/raw"
+          else
+            echo "✗ Errore upload (HTTP $HTTP_CODE)"
+            echo "$BODY"
+            exit 1
+          fi
+
+      - name: Notifica errore
+        if: failure()
+        run: |
+          echo "❌ Workflow fallito"
+          exit 1
