@@ -1,43 +1,102 @@
-name: Aggiorna playlist TGR
+#!/usr/bin/env python3
+import os
+import sys
+import json
+import re
+import requests
+import urllib3
 
-on:
-  push:
-    branches: [ main, master ]
-  schedule:
-    # Ogni giorno alle 12:00 UTC (modifica secondo necessità)
-    - cron: '0 11 * * *'
-  workflow_dispatch:  # permette esecuzione manuale
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-permissions:
-  contents: write  # necessario per pushare modifiche
+DEFAULT_URL = "https://test34344.herokuapp.com/filter.php?numTest=A1A211"
+DEFAULT_OUTPUT = "tg_regionali.m3u"
 
-jobs:
-  update:
-    runs-on: ubuntu-latest
+def clean_title(title):
+    """Rimuove i tag [COLOR...] dal titolo."""
+    return re.sub(r'\[COLOR[^\]]*\]|\[/COLOR\]', '', title).strip()
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+def fetch_json(url):
+    try:
+        resp = requests.get(url, timeout=15, verify=False)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as e:
+        print(f"Errore nel recuperare {url}: {e}", file=sys.stderr)
+        return None
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+def generate_playlist(main_url, output_file):
+    main_data = fetch_json(main_url)
+    if not main_data or "items" not in main_data:
+        print("Impossibile ottenere l'elenco delle regioni.", file=sys.stderr)
+        return False
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install requests
+    items = main_data["items"]
+    m3u_lines = ["#EXTM3U"]
+    count = 0
 
-      - name: Generate playlist
-        run: python tg.py
-        echo "Contenuto del file generato:"
-        cat tg_regionali.m3u || echo "File non trovato"
+    for item in items:
+        title = clean_title(item.get("title", "Senza titolo"))
+        external_url = item.get("externallink")
+        if not external_url:
+            continue
 
-      - name: Commit and push if changed
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add tg_regionali.m3u
-          git diff --staged --quiet || git commit -m "Aggiornamento automatico playlist [skip ci]"
-          git push
+        region_data = fetch_json(external_url)
+        if not region_data or "items" not in region_data or not region_data["items"]:
+            print(f"Nessun flusso trovato per {title}", file=sys.stderr)
+            continue
+
+        stream_item = region_data["items"][0]
+        stream_url = stream_item.get("link")
+        if not stream_url:
+            print(f"Campo 'link' mancante per {title}", file=sys.stderr)
+            continue
+
+        m3u_lines.append(f'#EXTINF:-1,{title}')
+        m3u_lines.append(stream_url)
+        count += 1
+
+    # Debug: stampa il numero di righe da scrivere
+    print(f"Numero di righe da scrivere: {len(m3u_lines)}", file=sys.stderr)
+
+    try:
+        with open(output_file, "w", encoding="utf-8") as f:
+            f.write("\n".join(m3u_lines))
+    except Exception as e:
+        print(f"Errore durante la scrittura del file: {e}", file=sys.stderr)
+        return False
+
+    # Verifica che il file sia stato scritto
+    if os.path.exists(output_file):
+        size = os.path.getsize(output_file)
+        print(f"File scritto: {output_file} (dimensione: {size} byte)", file=sys.stderr)
+        if size == 0:
+            print("ATTENZIONE: Il file è vuoto!", file=sys.stderr)
+            # Leggi e stampa il contenuto (dovrebbe essere vuoto)
+            with open(output_file, "r", encoding="utf-8") as f:
+                content = f.read()
+                print(f"Contenuto: {repr(content)}", file=sys.stderr)
+        else:
+            # Stampa le prime 5 righe per verifica
+            with open(output_file, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+                print(f"Prime 5 righe del file:", file=sys.stderr)
+                for i, line in enumerate(lines[:5]):
+                    print(f"{i+1}: {line.rstrip()}", file=sys.stderr)
+    else:
+        print(f"ERRORE: Il file {output_file} non è stato creato.", file=sys.stderr)
+        return False
+
+    print(f"Playlist generata: {output_file} ({count} canali)")
+    return True
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Genera playlist M3U per TGR regioni")
+    parser.add_argument("--url", default=os.environ.get("MAIN_URL", DEFAULT_URL),
+                        help="URL principale del filtro")
+    parser.add_argument("--output", default=os.environ.get("OUTPUT_FILE", DEFAULT_OUTPUT),
+                        help="Nome del file M3U in output")
+    args = parser.parse_args()
+
+    success = generate_playlist(args.url, args.output)
+    sys.exit(0 if success else 1)
