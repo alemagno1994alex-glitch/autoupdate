@@ -31,6 +31,8 @@ jobs:
 
       - name: Generate playlist
         run: python tg.py
+        echo "Contenuto del file generato:"
+        cat tg_regionali.m3u || echo "File non trovato"
 
       - name: Commit and push if changed
         run: |

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import os
 import sys
 import json
@@ -12,7 +11,6 @@ DEFAULT_URL = "https://test34344.herokuapp.com/filter.php?numTest=A1A211"
 DEFAULT_OUTPUT = "tg_regionali.m3u"
 
 def clean_title(title):
-    """Rimuove i tag [COLOR...] dal titolo."""
     return re.sub(r'\[COLOR[^\]]*\]|\[/COLOR\]', '', title).strip()
 
 def fetch_json(url):
@@ -55,8 +53,26 @@ def generate_playlist(main_url, output_file):
         m3u_lines.append(stream_url)
         count += 1
 
-    with open(output_file, "w", encoding="utf-8") as f:
-        f.write("\n".join(m3u_lines))
+    try:
+        with open(output_file, "w", encoding="utf-8") as f:
+            f.write("\n".join(m3u_lines))
+    except Exception as e:
+        print(f"Errore durante la scrittura del file: {e}", file=sys.stderr)
+        return False
+
+    # Verifica che il file sia stato scritto
+    if os.path.exists(output_file):
+        size = os.path.getsize(output_file)
+        print(f"File scritto: {output_file} (dimensione: {size} byte)")
+        if size == 0:
+            print("ATTENZIONE: Il file è vuoto!", file=sys.stderr)
+            # Leggi il contenuto per debug?
+            with open(output_file, "r", encoding="utf-8") as f:
+                content = f.read()
+                print(f"Contenuto: {repr(content)}", file=sys.stderr)
+    else:
+        print(f"ERRORE: Il file {output_file} non è stato creato.", file=sys.stderr)
+        return False
 
     print(f"Playlist generata: {output_file} ({count} canali)")
     return True
