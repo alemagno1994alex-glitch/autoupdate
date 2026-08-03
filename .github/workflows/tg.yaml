@@ -71,4 +71,3 @@ jobs:
               }"
             echo "Gist aggiornato: https://gist.github.com/$GIST_ID"
           fi
-          
