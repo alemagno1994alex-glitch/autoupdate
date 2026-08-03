@@ -1,4 +1,4 @@
-name: Aggiorna playlist TGR e pubblica su Gist
+name: Pubblica playlist su Gist privato
 
 on:
   push:
@@ -8,10 +8,10 @@ on:
   workflow_dispatch:               # esecuzione manuale
 
 permissions:
-  contents: read                   # solo lettura del repo
+  contents: read                   # solo lettura del repo, niente commit
 
 jobs:
-  update:
+  publish-gist:
     runs-on: ubuntu-latest
 
     steps:
@@ -31,20 +31,20 @@ jobs:
       - name: Generate playlist
         run: python tg.py
 
-      - name: Publish to secret gist
+      - name: Publish to secret Gist
         env:
           GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
-          GIST_ID:    ${{ secrets.GIST_ID }}      # opzionale: se non impostato, crea un nuovo gist
+          GIST_ID:    ${{ secrets.GIST_ID }}   # opzionale
         run: |
-          # Se non c'è un GIST_ID, ne crea uno nuovo e lo salva come secret (solo la prima volta)
+          # Se GIST_ID non è impostato, crea un nuovo gist
           if [ -z "$GIST_ID" ]; then
-            echo "Nessun GIST_ID trovato. Creazione di un nuovo gist..."
+            echo "📦 Creazione di un nuovo gist privato..."
             RESPONSE=$(curl -s -X POST \
               -H "Authorization: token $GIST_TOKEN" \
               -H "Accept: application/vnd.github.v3+json" \
               https://api.github.com/gists \
               -d "{
-                \"description\": \"Playlist TGR regioni\",
+                \"description\": \"Playlist TGR regioni (aggiornata automaticamente)\",
                 \"public\": false,
                 \"files\": {
                   \"tg_regionali.m3u\": {
@@ -53,11 +53,11 @@ jobs:
                 }
               }")
             GIST_ID=$(echo "$RESPONSE" | jq -r '.id')
-            echo "GIST_ID=$GIST_ID" >> $GITHUB_ENV
-            # NOTA: dovrai aggiungere manualmente questo ID come secret nel repo per i prossimi run
-            echo "Il nuovo Gist ID è: $GIST_ID. Aggiungilo come secret GIST_ID per i prossimi aggiornamenti."
+            echo "✅ Nuovo gist creato con ID: $GIST_ID"
+            echo "⚠️  Aggiungi questo ID come secret 'GIST_ID' per i prossimi aggiornamenti."
+            echo "🔗 URL: https://gist.github.com/$GIST_ID"
           else
-            # Aggiorna il gist esistente
+            echo "🔄 Aggiornamento del gist esistente ($GIST_ID)..."
             curl -s -X PATCH \
               -H "Authorization: token $GIST_TOKEN" \
               -H "Accept: application/vnd.github.v3+json" \
@@ -69,5 +69,5 @@ jobs:
                   }
                 }
               }"
-            echo "Gist aggiornato: https://gist.github.com/$GIST_ID"
+            echo "✅ Gist aggiornato: https://gist.github.com/$GIST_ID"
           fi
