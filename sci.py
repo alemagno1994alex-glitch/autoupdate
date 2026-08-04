@@ -10,19 +10,20 @@ from playwright.async_api import async_playwright
 
 # ==================== CONFIG ====================
 PASSWORD = "---!!!wafu.aq.sa.lahat.-0419!!!---"
-PLAYER = os.environ.get("PLAYER", "X1")   # da env o default X1
+PLAYER = os.environ.get("PLAYER", "X1")   # X1 o X2
 PORT = 8000
 OUTPUT = "sky.m3u"
-CI = os.environ.get("CI", "false").lower() == "true"   # True in GitHub Actions
+CI = os.environ.get("CI", "false").lower() == "true"
 
-# ==================== LOGO MAP ====================
+# ==================== LOGO MAP (esempio ridotto) ====================
 LOGO_MAP = {
     "sky uno": "https://pixel.disco.nowtv.it/logo/skychb_477_darknow/LOGO_CHANNEL_LIGHT/4000?language=it-IT&proposition=NOWOTT",
-    # ... (inserisci qui tutte le tue mappe, non le riscrivo per brevità)
-    # Assicurati che la mappa sia completa come nel tuo script originale.
+    "sky atlantic": "https://pixel.disco.nowtv.it/logo/skychb_226_darknow/LOGO_CHANNEL_LIGHT/4000?language=it-IT&proposition=NOWOTT",
+    "sky serie": "https://pixel.disco.nowtv.it/logo/skychb_684_darknow/LOGO_CHANNEL_LIGHT/4000?language=it-IT&proposition=NOWOTT",
+    # ... inserisci qui tutte le tue mappe (come nel tuo script originale)
+    # Se non hai tutte le mappe, lo script genera comunque i canali senza logo.
 }
 
-# ==================== FUNZIONE PULIZIA NOME CANALE ====================
 def clean_channel_name(name):
     if not name:
         return ""
@@ -43,20 +44,22 @@ def start_server(port=PORT, directory="."):
 # ==================== FUNZIONE PRINCIPALE ====================
 async def extract_playlist(player=PLAYER, password=PASSWORD):
     async with async_playwright() as p:
-        # Avvia browser in headless se CI, altrimenti visibile
         browser = await p.chromium.launch(
             headless=CI,
             args=[
                 '--disable-blink-features=AutomationControlled',
-                '--no-sandbox',           # necessario su GitHub
-                '--disable-dev-shm-usage' # utile in container
+                '--no-sandbox',
+                '--disable-dev-shm-usage'
             ]
         )
-        context = await browser.new_context(user_agent='xromtv.italia')
+        context = await browser.new_context(user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
         page = await context.new_page()
 
-        # Anti-debug
+        # Override anti-detection
         await page.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {get: () => false});
+            Object.defineProperty(navigator, 'plugins', {get: () => [1,2,3,4,5]});
+            Object.defineProperty(navigator, 'languages', {get: () => ['it-IT', 'it']});
             window._kill = function() {};
             const orig = window.setInterval;
             window.setInterval = function(fn, d) {
@@ -65,57 +68,61 @@ async def extract_playlist(player=PLAYER, password=PASSWORD):
             };
             console.clear = function() {};
             Object.defineProperty(window.location, 'hostname', {get: () => 'localhost'});
-            Object.defineProperty(navigator, 'userAgent', {get: () => 'xromtv.italia'});
         """)
 
         url = f"http://127.0.0.1:{PORT}/sci.html"
         print(f"🔗 Caricamento {url}...")
-        await page.goto(url)
-        await page.click(f"text={player}")
-        await page.wait_for_timeout(1000)
+        await page.goto(url, wait_until="domcontentloaded")
+        print("✅ Pagina caricata")
 
-        # Gestione dialogo password
+        # Clicca sul pulsante corretto usando l'attributo onclick
+        if player == "X1":
+            await page.click("button[onclick*='eskeyfhd47298']")
+        else:
+            await page.click("button[onclick*='eskeyfhd47298-2']")
+        print(f"✅ Cliccato su {player}")
+
+        # Gestione dialogo password (se appare)
         try:
-            dialog = await page.wait_for_event("dialog", timeout=5000)
+            dialog = await page.wait_for_event("dialog", timeout=3000)
             await dialog.accept(password)
+            print("✅ Dialogo password accettato")
         except:
-            pass
+            print("⏳ Nessun dialogo password")
 
-        print(f"⏳ Attendo il caricamento di {player}...")
-        # Attesa più lunga per headless
-        await page.wait_for_timeout(8000 if CI else 5000)
-
-        # Ottieni totale canali
-        total = await page.evaluate("state.ch.length") if await page.evaluate("typeof state !== 'undefined'") else 0
-        if total == 0:
-            print("❌ Nessun canale trovato.")
+        # Attendi che la variabile state venga definita e popolata
+        print("⏳ Attendo state...")
+        try:
+            await page.wait_for_function(
+                "typeof state !== 'undefined' && state.ch && state.ch.length > 0",
+                timeout=30000
+            )
+            print("✅ state trovato")
+        except:
+            print("❌ Timeout: state non definito o vuoto")
             await browser.close()
             return
 
+        total = await page.evaluate("state.ch.length")
         print(f"📺 Trovati {total} canali")
 
-        # Scorri tutti i canali
-        print("⏳ Caricamento URL e lic...")
-        await page.keyboard.press("ArrowDown")
-        await page.wait_for_timeout(300)
-
+        # Scorri tutti i canali per caricare URL e lic
+        print("⏳ Scorro i canali per caricare URL...")
         for i in range(total):
             await page.keyboard.press("ArrowDown")
-            await page.wait_for_timeout(200)   # leggermente più lento per affidabilità
-
+            await page.wait_for_timeout(150)
             if i % 20 == 0:
                 count = await page.evaluate("""
                     () => state.ch.filter(c => c.url && c.url.trim() !== '').length
                 """)
                 print(f"  ✅ {count}/{total} canali caricati")
 
-        # Estrai canali
+        # Estrai canali con URL
         channels = await page.evaluate("""
             () => state.ch.filter(c => c.url && c.url.trim() !== '')
         """)
-
         if not channels:
-            print("❌ Nessun canale con URL.")
+            print("❌ Nessun canale con URL")
             await browser.close()
             return
 
@@ -155,13 +162,9 @@ async def extract_playlist(player=PLAYER, password=PASSWORD):
 
 # ==================== AVVIO ====================
 if __name__ == "__main__":
-    # Avvia il server in un thread separato
     server_thread = threading.Thread(target=start_server, args=(PORT, "."), daemon=True)
     server_thread.start()
-    time.sleep(3)   # attendi che il server parta
-
-    # Esegui l'estrazione (il player viene dalla variabile PLAYER, già settata)
+    time.sleep(3)
     asyncio.run(extract_playlist())
-
-    print("✅ Estrazione completata. Il server si fermerà automaticamente.")
-    # Il processo termina; il thread server è daemon, quindi si chiude con il main.
+    print("✅ Estrazione completata.")
+    # Il server è daemon, quindi termina con il processo
