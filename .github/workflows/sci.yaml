@@ -15,3 +15,4 @@
     else
       gh gist edit "$GIST_ID" -f sky.m3u -m "Aggiornamento automatico" < sky.m3u
     fi
+    
