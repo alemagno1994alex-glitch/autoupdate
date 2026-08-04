@@ -3,7 +3,7 @@
 // ============================================================
 
 // Proxy CORS (gira sulla tua VPS). Tutto il traffico passa di qui.
-export const PROXY = "https://proxy.akirayuki.online/?url=";
+export const PROXY = "https://xromita.com/xrom-voood/xrom-vod-proxy.php?url=";
 
 // Sorgente stream
 export const SOURCE = "vixsrc.to";
