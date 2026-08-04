@@ -1,4 +1,4 @@
-name: Pubblica playlist su Gist privato
+name: Pubblica TG
 
 on:
   push:

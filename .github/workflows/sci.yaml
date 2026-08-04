@@ -2,59 +2,52 @@ name: Estrai Sky e carica su Gist
 
 on:
   schedule:
-    - cron: '0 6 * * *'        # ogni giorno alle 6:00 UTC
-  workflow_dispatch:           # consente esecuzione manuale
+    - cron: '0 6 * * *'
+  workflow_dispatch:
 
 jobs:
   extract:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Clona il repository (dove ci sono script.py e xrom2.html)
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # 2. Configura Python
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
-      # 3. Installa Playwright e i browser
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install playwright
           playwright install chromium
 
-      # 4. Esegue lo script Python (genera sky.m3u)
       - name: Run extraction
         env:
-          CI: true              # forza headless
-          PLAYER: X1            # cambia in X2 se necessario
+          CI: true
+          PLAYER: X1
         run: |
           python sci.py
+          echo "📂 Contenuto dopo esecuzione:"
+          ls -la
 
-      # 5. Carica/aggiorna il file sky.m3u su un gist privato
-      - name: Upload to Gist (private)
+      - name: Upload to Gist
         env:
           GH_TOKEN: ${{ secrets.GIST_TOKEN }}
         run: |
           GIST_ID="${{ secrets.GIST_ID }}"
-          if [ -z "$GIST_ID" ]; then
-            echo "⚠️  GIST_ID non impostato. Creo un nuovo gist..."
-            gh gist create sky.m3u --private --desc "Sky playlist aggiornata" --filename sky.m3u
-          else
-            echo "📝 Aggiorno il gist esistente con ID $GIST_ID"
-            gh gist edit "$GIST_ID" -f sky.m3u -m "Aggiornamento automatico" < sky.m3u
-            echo "✅ Gist aggiornato correttamente."
+          if [ ! -f sky.m3u ]; then
+            echo "❌ sky.m3u non trovato! Ecco la directory:"
+            ls -la
+            exit 1
           fi
-
-      # 6. (Opzionale) Mostra l'URL del gist nei log
-      - name: Show Gist URL
-        run: |
-          if [ -n "${{ secrets.GIST_ID }}" ]; then
-            echo "🔗 URL del gist: https://gist.github.com/${{ github.actor }}/${{ secrets.GIST_ID }}"
+          if [ -z "$GIST_ID" ]; then
+            echo "⚠️ Creo un nuovo gist..."
+            gh gist create sky.m3u --private --desc "Sky playlist" --filename sky.m3u
           else
-            echo "🔗 Nuovo gist creato: controlla l'output dello step precedente."
+            echo "📝 Aggiorno gist $GIST_ID"
+            cat sky.m3u | gh gist edit "$GIST_ID" -f sky.m3u -m "Aggiornamento $(date)"
+            echo "✅ Fatto."
           fi
