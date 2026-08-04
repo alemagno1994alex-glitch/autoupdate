@@ -44,7 +44,6 @@ jobs:
             exit 1
           fi
           if [ -z "$GIST_ID" ]; then
-            echo "⚠️ Creo un nuovo gist..."
             gh gist create sky.m3u --private --desc "Sky playlist" --filename sky.m3u
           else
             echo "📝 Aggiorno gist $GIST_ID"
