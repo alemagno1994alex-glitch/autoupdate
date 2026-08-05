@@ -1,19 +1,17 @@
 name: Pubblica TG
-
 on:
   push:
     branches: [ main, master ]
   schedule:
-    - cron: '0 11 * * *'          # ogni giorno alle 11:00 UTC
-  workflow_dispatch:               # esecuzione manuale
+    - cron: '0 12 * * *'
+  workflow_dispatch:
 
 permissions:
-  contents: read                   # solo lettura del repo, niente commit
+  contents: read
 
 jobs:
   publish-gist:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -27,48 +25,71 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install requests
+          apt-get update && apt-get install -y jq  # 👈 Installa jq
 
       - name: Generate playlist
-        run: python tg.py
+        run: |
+          python tg.py
+          # Verifica che il file sia stato creato
+          if [ ! -f tg_regionali.m3u ]; then
+            echo "❌ ERRORE: tg.py non ha generato tg_regionali.m3u"
+            exit 1
+          fi
+          echo "✅ File generato con successo"
+          cat tg_regionali.m3u | head -10  # Mostra le prime righe per debug
 
       - name: Publish to secret Gist
         env:
           GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
-          GIST_ID:    ${{ secrets.GIST_ID }}   # opzionale
+          GIST_ID: ${{ secrets.GIST_ID }}
         run: |
-          # Se GIST_ID non è impostato, crea un nuovo gist
+          # Verifica che il token sia impostato
+          if [ -z "$GIST_TOKEN" ]; then
+            echo "❌ ERRORE: GIST_TOKEN non è configurato!"
+            exit 1
+          fi
+
+          FILE_CONTENT=$(jq -Rs . < tg_regionali.m3u)
+
           if [ -z "$GIST_ID" ]; then
             echo "📦 Creazione di un nuovo gist privato..."
             RESPONSE=$(curl -s -X POST \
               -H "Authorization: token $GIST_TOKEN" \
               -H "Accept: application/vnd.github.v3+json" \
-              https://api.github.com/gists \
+              https://api.anthropic.com/gists \
               -d "{
                 \"description\": \"Playlist TGR regioni (aggiornata automaticamente)\",
                 \"public\": false,
                 \"files\": {
                   \"tg_regionali.m3u\": {
-                    \"content\": $(jq -Rs . < tg_regionali.m3u)
+                    \"content\": $FILE_CONTENT
                   }
                 }
               }")
-            GIST_ID=$(echo "$RESPONSE" | jq -r '.id')
-            echo "✅ Nuovo gist creato con ID: $GIST_ID"
-            echo "⚠️  Aggiungi questo ID come secret 'GIST_ID' per i prossimi aggiornamenti."
+            
+            echo "Risposta API: $RESPONSE"  # Debug
+            GIST_ID=$(echo "$RESPONSE" | jq -r '.id // empty')
+            
+            if [ -z "$GIST_ID" ]; then
+              echo "❌ Errore nella creazione del gist"
+              exit 1
+            fi
+            
+            echo "✅ Nuovo gist creato: $GIST_ID"
             echo "🔗 URL: https://gist.github.com/$GIST_ID"
           else
-            echo "🔄 Aggiornamento del gist esistente ($GIST_ID)..."
-            curl -s -X PATCH \
+            echo "🔄 Aggiornamento del gist ($GIST_ID)..."
+            RESPONSE=$(curl -s -X PATCH \
               -H "Authorization: token $GIST_TOKEN" \
               -H "Accept: application/vnd.github.v3+json" \
               https://api.github.com/gists/$GIST_ID \
               -d "{
                 \"files\": {
                   \"tg_regionali.m3u\": {
-                    \"content\": $(jq -Rs . < tg_regionali.m3u)
+                    \"content\": $FILE_CONTENT
                   }
                 }
-              }"
+              }")
+            
             echo "✅ Gist aggiornato: https://gist.github.com/$GIST_ID"
           fi
-          
