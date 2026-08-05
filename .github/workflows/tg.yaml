@@ -25,71 +25,18 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install requests
-          apt-get update && apt-get install -y jq  # 👈 Installa jq
 
       - name: Generate playlist
         run: |
           python tg.py
-          # Verifica che il file sia stato creato
           if [ ! -f tg_regionali.m3u ]; then
             echo "❌ ERRORE: tg.py non ha generato tg_regionali.m3u"
             exit 1
           fi
-          echo "✅ File generato con successo"
-          cat tg_regionali.m3u | head -10  # Mostra le prime righe per debug
+          echo "✅ File generato"
 
       - name: Publish to secret Gist
         env:
           GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
           GIST_ID: ${{ secrets.GIST_ID }}
-        run: |
-          # Verifica che il token sia impostato
-          if [ -z "$GIST_TOKEN" ]; then
-            echo "❌ ERRORE: GIST_TOKEN non è configurato!"
-            exit 1
-          fi
-
-          FILE_CONTENT=$(jq -Rs . < tg_regionali.m3u)
-
-          if [ -z "$GIST_ID" ]; then
-            echo "📦 Creazione di un nuovo gist privato..."
-            RESPONSE=$(curl -s -X POST \
-              -H "Authorization: token $GIST_TOKEN" \
-              -H "Accept: application/vnd.github.v3+json" \
-              https://api.anthropic.com/gists \
-              -d "{
-                \"description\": \"Playlist TGR regioni (aggiornata automaticamente)\",
-                \"public\": false,
-                \"files\": {
-                  \"tg_regionali.m3u\": {
-                    \"content\": $FILE_CONTENT
-                  }
-                }
-              }")
-            
-            echo "Risposta API: $RESPONSE"  # Debug
-            GIST_ID=$(echo "$RESPONSE" | jq -r '.id // empty')
-            
-            if [ -z "$GIST_ID" ]; then
-              echo "❌ Errore nella creazione del gist"
-              exit 1
-            fi
-            
-            echo "✅ Nuovo gist creato: $GIST_ID"
-            echo "🔗 URL: https://gist.github.com/$GIST_ID"
-          else
-            echo "🔄 Aggiornamento del gist ($GIST_ID)..."
-            RESPONSE=$(curl -s -X PATCH \
-              -H "Authorization: token $GIST_TOKEN" \
-              -H "Accept: application/vnd.github.v3+json" \
-              https://api.github.com/gists/$GIST_ID \
-              -d "{
-                \"files\": {
-                  \"tg_regionali.m3u\": {
-                    \"content\": $FILE_CONTENT
-                  }
-                }
-              }")
-            
-            echo "✅ Gist aggiornato: https://gist.github.com/$GIST_ID"
-          fi
+        run: python publish_gist.py
