@@ -4,9 +4,9 @@ on:
   # Esegui automaticamente ogni giorno alle 8:00 (UTC)
   schedule:
    
-    - cron: '0 6 * * *'   
-    - cron: '0 16 * * *'
-    - cron: '0 21 * * *'
+    - cron: '0 5 * * *'    # 7
+    - cron: '0 12 * * *'   # 14
+    - cron: '0 19 * * *'   # 21
     
   #  Permette di eseguire manualmente il workflow dalla UI di GitHub
   workflow_dispatch:
