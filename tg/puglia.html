@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>TGR Live</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@0.14.17/dist/hls.min.js">
+    </script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #000;
+        }
+        video {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+            object-fit: cover;
+            background: #000;
+            cursor: pointer;
+        }
+
+        /* Overlay caricamento/errore */
+        #overlay {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.75);
+            color: #fff;
+            font-family: system-ui, sans-serif;
+            font-size: 1.1rem;
+            pointer-events: none;
+            transition: opacity 0.5s;
+            opacity: 1;
+            z-index: 10;
+            padding: 20px;
+            text-align: center;
+        }
+        #overlay.hidden {
+            opacity: 0;
+        }
+        #overlay .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #444;
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-bottom: 16px;
+        }
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+        #overlay .error {
+            color: #ff6b6b;
+        }
+        #overlay .small {
+            font-size: 0.8rem;
+            color: #999;
+            margin-top: 8px;
+        }
+
+        /* Hint audio (scompare quando attivi l'audio) */
+        #audio-hint {
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+            padding: 8px 20px;
+            border-radius: 40px;
+            color: #aaa;
+            font-family: system-ui, sans-serif;
+            font-size: 0.85rem;
+            border: 1px solid #333;
+            pointer-events: none;
+            z-index: 20;
+            transition: opacity 0.8s;
+            opacity: 0;
+        }
+        #audio-hint.show {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Aggiunto "controls" per la barra nativa -->
+    <video id="videoPlayer" playsinline autoplay muted controls></video>
+
+    <div id="overlay">
+        <div class="spinner" id="spinner"></div>
+        <span id="statusText">Caricamento…</span>
+        <div class="small" id="errorDetail"></div>
+    </div>
+
+    <div id="audio-hint">🔇 Clicca sul video o usa i tasti volume</div>
+
+    <script>
+        (() => {
+            'use strict';
+
+            const PROXY = 'https://regionali.oren-enoz.workers.dev/?url=';
+
+            const video = document.getElementById('videoPlayer');
+            const overlay = document.getElementById('overlay');
+            const spinner = document.getElementById('spinner');
+            const statusText = document.getElementById('statusText');
+            const errorDetail = document.getElementById('errorDetail');
+            const audioHint = document.getElementById('audio-hint');
+
+            let hls = null;
+            let isPlaying = false;
+            let hintTimeout = null;
+
+            // ─── UI MINIMAL ──────────────────────────────────────────
+
+            function setOverlay(visible, text, isError = false, detail = '') {
+                if (visible) {
+                    overlay.classList.remove('hidden');
+                    spinner.style.display = 'block';
+                    statusText.textContent = text || 'Caricamento…';
+                    statusText.style.color = isError ? '#ff6b6b' : '#fff';
+                    errorDetail.textContent = detail || '';
+                } else {
+                    overlay.classList.add('hidden');
+                }
+            }
+
+            function showHint(show) {
+                if (show) {
+                    audioHint.classList.add('show');
+                    clearTimeout(hintTimeout);
+                    hintTimeout = setTimeout(() => {
+                        audioHint.classList.remove('show');
+                    }, 5000);
+                } else {
+                    audioHint.classList.remove('show');
+                }
+            }
+
+            // ─── AUDIO ────────────────────────────────────────────────
+
+            function toggleAudio() {
+                video.muted = !video.muted;
+                if (!video.muted) {
+                    showHint(false);
+                    if (video.paused) video.play().catch(() => {});
+                } else {
+                    showHint(true);
+                }
+            }
+
+            // Clic sul video → toggle audio (utile se la barra è nascosta)
+            video.addEventListener('click', toggleAudio);
+
+            video.addEventListener('volumechange', () => {
+                if (!video.muted) showHint(false);
+                else showHint(true);
+            });
+
+            // ─── TASTI FRECCIA ───────────────────────────────────────
+
+            document.addEventListener('keydown', (e) => {
+                // Ignora se l'utente sta digitando in un campo di input (non ce ne sono, ma per sicurezza)
+                if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+                switch (e.key) {
+                    case 'ArrowLeft':
+                        e.preventDefault();
+                        video.currentTime = Math.max(0, video.currentTime - 10);
+                        break;
+                    case 'ArrowRight':
+                        e.preventDefault();
+                        video.currentTime = Math.min(video.duration || Infinity, video.currentTime + 10);
+                        break;
+                    case 'ArrowUp':
+                        e.preventDefault();
+                        video.volume = Math.min(1, video.volume + 0.1);
+                        // Se era muto, togli il muto
+                        if (video.muted) video.muted = false;
+                        showHint(false);
+                        break;
+                    case 'ArrowDown':
+                        e.preventDefault();
+                        video.volume = Math.max(0, video.volume - 0.1);
+                        break;
+                    default:
+                        break;
+                }
+            });
+
+            // ─── RESET ────────────────────────────────────────────────
+
+            function resetPlayer() {
+                if (hls) { hls.destroy();
+                    hls = null; }
+                video.pause();
+                video.removeAttribute('src');
+                video.load();
+                isPlaying = false;
+            }
+
+            // ─── PROXY FETCH ──────────────────────────────────────────
+
+            async function fetchViaProxy(url) {
+                const proxyUrl = PROXY + encodeURIComponent(url);
+                const resp = await fetch(proxyUrl);
+                if (!resp.ok) throw new Error(`Proxy HTTP ${resp.status}`);
+                return await resp.json();
+            }
+
+            async function fetchPageHtml(pageUrl) {
+                const data = await fetchViaProxy(pageUrl);
+                if (!data.content) throw new Error('Nessun contenuto nella risposta');
+                return data.content;
+            }
+
+            async function resolveRelinker(relinkerUrl) {
+                const data = await fetchViaProxy(relinkerUrl);
+                if (!data.finalUrl) throw new Error('Nessun finalUrl nella risposta');
+                return data.finalUrl;
+            }
+
+            // ─── EXTRACT VIDEO URL ────────────────────────────────────
+
+            function getRegionTitle(pageUrl, manifestUrl) {
+                if (pageUrl.includes('/tgr/bolzano/')) return 'TGR Bolzano';
+                if (pageUrl.includes('/tgr/trento/')) return 'TGR Trento';
+                if (pageUrl.includes('/tgr/fvg/')) return 'TGR Friuli Venezia Giulia';
+                if (pageUrl.includes('/tgr/vda/')) return 'TGR Valle d\'Aosta';
+                if (pageUrl.includes('/tgr/emiliaromagna/')) return 'TGR Emilia Romagna';
+                const match = manifestUrl.match(/\/TG_regionali\/(TG_[^/]+)\//);
+                if (match) {
+                    const raw = match[1].replace('TG_', '').replace(/_/g, ' ');
+                    return `TGR ${raw.toUpperCase()}`;
+                }
+                return 'TGR Notiziario';
+            }
+
+            async function extractVideoUrl(pageUrl) {
+                const html = await fetchPageHtml(pageUrl);
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const player = doc.querySelector('rainews-player');
+                if (!player) throw new Error('Elemento <rainews-player> non trovato');
+                const dataAttr = player.getAttribute('data');
+                if (!dataAttr) throw new Error('Attributo "data" mancante');
+                let payload;
+                try { payload = JSON.parse(dataAttr); } catch (e) {
+                    throw new Error('JSON del player non valido');
+                }
+                const relinker = payload.mediapolis || payload.content_url;
+                if (!relinker) throw new Error('Nessun mediapolis/content_url');
+                const manifestUrl = await resolveRelinker(relinker);
+                const cleanUrl = manifestUrl.split('?')[0];
+                const title = getRegionTitle(pageUrl, cleanUrl);
+                return { title, manifest: cleanUrl };
+            }
+
+            // ─── PLAY VIDEO ──────────────────────────────────────────
+
+            function playVideo(manifestUrl, title) {
+                resetPlayer();
+                setOverlay(true, `Caricamento ${title || ''}…`);
+                showHint(true);
+
+                if (Hls.isSupported()) {
+                    hls = new Hls({ enableWorker: true, lowLatencyMode: true });
+                    hls.loadSource(manifestUrl);
+                    hls.attachMedia(video);
+                    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                        video.play().catch(() => {});
+                        setOverlay(false);
+                        isPlaying = true;
+                    });
+                    hls.on(Hls.Events.ERROR, (evt, data) => {
+                        if (data.fatal) {
+                            setOverlay(true, '❌ Errore stream', true, 'Il manifest potrebbe non essere valido.');
+                            isPlaying = false;
+                        }
+                    });
+                    return;
+                }
+
+                if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                    video.src = manifestUrl;
+                    video.play().catch(() => {
+                        setOverlay(true, '⚠️ Riproduzione non disponibile', true);
+                    });
+                    video.addEventListener('loadedmetadata', () => {
+                        setOverlay(false);
+                        isPlaying = true;
+                    }, { once: true });
+                    video.addEventListener('error', () => {
+                        setOverlay(true, '❌ Errore', true);
+                    }, { once: true });
+                    return;
+                }
+
+                setOverlay(true, '⚠️ Browser non supportato', true);
+            }
+
+            // ─── LOAD REGION ──────────────────────────────────────────
+
+            async function loadRegion(pageUrl, label) {
+                try {
+                    setOverlay(true, `Analizzo ${label || 'URL'}…`);
+                    const result = await extractVideoUrl(pageUrl);
+                    playVideo(result.manifest, result.title || label);
+                } catch (err) {
+                    console.error(err);
+                    setOverlay(true, '❌ ' + err.message, true, 'Riprova tra qualche secondo.');
+                }
+            }
+
+            // ─── AVVIO ──────────────────────────────────────────────
+
+            const DEFAULT_URL = 'https://www.rainews.it/tgr/puglia/notiziari';
+            setTimeout(() => {
+                loadRegion(DEFAULT_URL, 'Puglia');
+            }, 300);
+
+            // Doppio clic → fullscreen (complementare al pulsante nativo)
+            video.addEventListener('dblclick', () => {
+                if (document.fullscreenElement) {
+                    document.exitFullscreen().catch(() => {});
+                } else {
+                    document.documentElement.requestFullscreen().catch(() => {});
+                }
+            });
+
+        })();
+    </script>
+
+</body>
+</html>
