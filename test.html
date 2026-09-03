@@ -248,7 +248,7 @@
         const tracks = player.getVariantTracks();
         const activeTrack = tracks.find(t => t.active);
         if (activeTrack) {
-          showOverlay(`🎬 ${activeTrack.height || 'Auto'}p | 🌍 ${activeTrack.language.toUpperCase()}`);
+          // showOverlay(`🎬 ${activeTrack.height || 'Auto'}p | 🌍 ${activeTrack.language.toUpperCase()}`);
         }
       } catch (e) {
         showOverlay("⚠️ Errore nel caricamento");
