@@ -144,7 +144,7 @@ def parse_prog(text: str) -> List[Dict]:
         if m:
             time = adjust_time(m.group(1))
             name = format_event(m.group(2))
-            url = to_http(m.group(3).strip())
+            url = to_http(m.group(3).split("|")[0].strip())
             cur_events.append({
                 'time': time,
                 'name': name,
