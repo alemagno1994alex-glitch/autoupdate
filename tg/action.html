@@ -339,32 +339,20 @@
         setOverlay(`🔎 Risoluzione: ${target.name}...`);
 
         // Resolve
-        const resolveUrl = `${VAVOO_WORKER_BASE}/resolve?url=${encodeURIComponent(target.url)}`;
-        const rResp = await fetch(resolveUrl);
-        if (!rResp.ok) throw new Error(`Worker HTTP ${rResp.status}`);
-        const rData = await rResp.json();
-        if (!rData.url) throw new Error(rData.error || "Nessun URL risolto");
+        // Resolve + proxy in una sola chiamata
+const streamUrl = `${VAVOO_WORKER_BASE}/stream?url=${encodeURIComponent(target.url)}`;
+const rResp = await fetch(streamUrl);
+if (!rResp.ok) throw new Error(`Worker HTTP ${rResp.status}`);
+const rData = await rResp.json();
+if (!rData.url) throw new Error(rData.error || "Nessun URL risolto");
 
-        console.log("✅ Stream URL:", rData.url);
+console.log("✅ Stream proxato:", rData.url);
 
-        // Applica mute prima del play
-        video.muted = START_MUTED;
-        if (START_MUTED) armUnmute();
+video.muted = START_MUTED;
+if (START_MUTED) armUnmute();
 
-        hideBoot();
-        playHLS(rData.url);
-
-      } catch (err) {
-        console.error("Errore:", err);
-        bootText.textContent = "ERRORE";
-        setOverlay(`❌ ${err.message}`, 8000);
-        // Riprova dopo 10 secondi
-        setTimeout(() => {
-          boot.classList.remove('hide');
-          start();
-        }, 10000);
-      }
-    }
+hideBoot();
+playHLS(rData.url);
 
     // ── Autorecovery se lo stream si blocca ──
     video.addEventListener("stalled", () => {
