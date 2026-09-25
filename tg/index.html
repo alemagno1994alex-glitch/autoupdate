@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Vavoo Player</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0d0208;
+      --border: #0d3b0d;
+      --border-bright: #1a6b1a;
+      --accent: #00ff41;
+      --text-dim: #008f11;
+      --muted: #005900;
+      --glow: 0 0 10px rgba(0, 255, 65, 0.6), 0 0 30px rgba(0, 255, 65, 0.2);
+      --glow-soft: 0 0 8px rgba(0, 255, 65, 0.3);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--accent);
+      font-family: 'Share Tech Mono', monospace;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    #matrix-canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+      opacity: 0.08;
+      pointer-events: none;
+    }
+
+    .grid-overlay {
+      position: fixed;
+      width: 100%;
+      height: 100%;
+      background-image:
+        linear-gradient(rgba(0, 255, 65, 0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 255, 65, 0.04) 1px, transparent 1px);
+      background-size: 24px 24px;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      position: relative;
+      z-index: 3;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 0 0 20px 0;
+      padding: 18px 20px;
+      background: rgba(8, 13, 8, 0.97);
+      border-bottom: 1px solid var(--border-bright);
+      border-top: 1px solid var(--border-bright);
+      box-shadow: 0 0 30px rgba(0, 255, 65, 0.1);
+      flex-wrap: wrap;
+      gap: 15px;
+      font-size: 13px;
+      color: var(--text-dim);
+      letter-spacing: 1px;
+    }
+
+    .logo {
+      font-family: 'Orbitron', monospace;
+      font-size: 22px;
+      font-weight: 900;
+      letter-spacing: 4px;
+      color: var(--accent);
+      text-shadow: var(--glow);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo-bracket {
+      color: var(--text-dim);
+      font-size: 18px;
+      animation: blink 1.8s step-end infinite;
+    }
+
+    @keyframes blink {
+
+      0%,
+      100% {
+        opacity: 1
+      }
+
+      50% {
+        opacity: 0
+      }
+    }
+
+    .group-select {
+      background: rgba(0, 255, 65, 0.04);
+      color: var(--accent);
+      border: 1px solid var(--border-bright);
+      padding: 8px 14px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 12px;
+      letter-spacing: 1px;
+      border-radius: 2px;
+      cursor: pointer;
+      text-transform: uppercase;
+      outline: none;
+    }
+
+    .group-select option {
+      background: #080d08;
+      color: var(--accent);
+    }
+
+    .btn-reload {
+      background: transparent;
+      border: 1px solid var(--border-bright);
+      color: var(--accent);
+      padding: 6px 14px;
+      font-family: 'Orbitron', monospace;
+      font-size: 11px;
+      letter-spacing: 2px;
+      cursor: pointer;
+      border-radius: 2px;
+      text-transform: uppercase;
+    }
+
+    .btn-reload:hover {
+      background: rgba(0, 255, 65, 0.1);
+    }
+
+    .search-bar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      align-items: center;
+    }
+
+    .search-bar input {
+      flex: 1;
+      background: rgba(0, 255, 65, 0.04);
+      color: var(--accent);
+      border: 1px solid var(--border-bright);
+      padding: 10px 14px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 13px;
+      letter-spacing: 1px;
+      border-radius: 2px;
+      outline: none;
+      transition: all 0.2s;
+    }
+
+    .search-bar input::placeholder {
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      font-size: 11px;
+    }
+
+    .search-bar input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 12px rgba(0, 255, 65, 0.2);
+    }
+
+    .search-bar .clear-btn {
+      background: transparent;
+      color: var(--text-dim);
+      border: 1px solid var(--border);
+      padding: 10px 14px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 12px;
+      cursor: pointer;
+      border-radius: 2px;
+      letter-spacing: 1px;
+    }
+
+    .search-bar .clear-btn:hover {
+      color: var(--accent);
+      border-color: var(--border-bright);
+    }
+
+    .search-bar .result-count {
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 1px;
+      white-space: nowrap;
+      padding-left: 8px;
+    }
+
+    .category-label {
+      font-family: 'Orbitron', monospace;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 4px;
+      color: var(--text-dim);
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-transform: uppercase;
+    }
+
+    .category-label::before {
+      content: '> ';
+      color: var(--accent);
+      text-shadow: var(--glow-soft);
+    }
+
+    .channel-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 14px;
+    }
+
+    .channel-card {
+      background: linear-gradient(to top, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.2), transparent);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+      cursor: pointer;
+      position: relative;
+      height: 150px;
+      transition: all 0.3s;
+    }
+
+    .channel-card:hover,
+    .channel-card:focus {
+      border-color: var(--border-bright);
+      transform: translateY(-4px);
+      box-shadow: 0 0 20px rgba(0, 255, 65, 0.15), 0 8px 30px rgba(0, 0, 0, 0.5);
+      outline: none;
+    }
+
+    .channel-logo-wrapper {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .channel-logo {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    .channel-placeholder {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--accent);
+      text-align: center;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      text-shadow: var(--glow-soft);
+      padding: 10px;
+    }
+
+    .channel-info {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: linear-gradient(to top, rgba(0, 0, 0, 0.95), rgba(0, 0, 0, 0.7), transparent);
+      z-index: 3;
+    }
+
+    .channel-name {
+      padding: 8px;
+      font-size: 0.55rem;
+      font-weight: 600;
+      color: var(--accent);
+      text-align: center;
+      letter-spacing: 1px;
+      text-shadow: var(--glow-soft);
+    }
+
+    .play-overlay {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0);
+      width: 44px;
+      height: 44px;
+      background: rgba(0, 255, 65, 0.15);
+      border: 2px solid var(--accent);
+      border-radius: 2px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: all 0.25s;
+      pointer-events: none;
+      z-index: 4;
+    }
+
+    .channel-card:hover .play-overlay,
+    .channel-card:focus .play-overlay {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+
+    .play-icon {
+      width: 0;
+      height: 0;
+      border-left: 14px solid var(--accent);
+      border-top: 9px solid transparent;
+      border-bottom: 9px solid transparent;
+      margin-left: 4px;
+      filter: drop-shadow(0 0 4px var(--accent));
+    }
+
+    .empty-state,
+    .loading {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-dim);
+      font-family: 'Orbitron', monospace;
+      letter-spacing: 2px;
+      grid-column: 1 / -1;
+    }
+
+    .empty-state-icon {
+      font-size: 3rem;
+      margin-bottom: 20px;
+      opacity: 0.5;
+    }
+
+    .empty-state-text {
+      font-size: 1.1rem;
+    }
+
+    .loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+      padding: 80px 20px;
+    }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 2px;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .loading-text {
+      font-size: 12px;
+      letter-spacing: 3px;
+      color: var(--text-dim);
+    }
+
+    #video-container {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh;
+      background: #000;
+      z-index: 9999;
+      display: none;
+      overflow: hidden;
+      overscroll-behavior: contain;
+    }
+
+    #video-container.active {
+      display: block;
+    }
+
+    video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      background: #000;
+      display: block;
+    }
+
+    #overlay {
+      position: fixed;
+      top: calc(20px + env(safe-area-inset-top));
+      left: calc(20px + env(safe-area-inset-left));
+
+      background: rgba(0, 20, 0, 0.9);
+      color: var(--accent);
+      padding: 10px 15px;
+      border-radius: 2px;
+      border: 1px solid var(--border-bright);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 14px;
+      display: none;
+      z-index: 10000;
+      max-width: 80vw;
+      word-break: break-all;
+    }
+
+    #close-player {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: rgba(0, 20, 0, 0.9);
+      color: var(--accent);
+      border: 1px solid var(--border-bright);
+      padding: 10px 22px;
+      font-family: 'Orbitron', monospace;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      cursor: pointer;
+      z-index: 10001;
+      text-transform: uppercase;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s;
+    }
+
+    #video-container.active #close-player {
+      pointer-events: auto;
+    }
+
+    #video-container.active.show-controls #close-player {
+      opacity: 1;
+    }
+
+    #close-player:focus {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+      opacity: 1;
+    }
+
+    #close-player:hover {
+      background: rgba(0, 255, 65, 0.12);
+    }
+
+    /* Badge "muto" per ricordare all'utente di toccare per l'audio */
+    #unmute-hint {
+      position: fixed;
+      bottom: calc(20px + env(safe-area-inset-bottom));
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 20, 0, 0.9);
+      color: var(--accent);
+      border: 1px solid var(--border-bright);
+      padding: 8px 16px;
+      font-family: 'Orbitron', monospace;
+      font-size: 12px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      z-index: 10002;
+      display: none;
+      cursor: pointer;
+    }
+
+    #unmute-hint.show {
+      display: block;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+
+      0%,
+      100% {
+        opacity: 0.7;
+      }
+
+      50% {
+        opacity: 1;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <canvas id="matrix-canvas"></canvas>
+  <div class="grid-overlay"></div>
+
+  <div class="header">
+    <div class="logo">
+      <span class="logo-bracket">[</span>
+      📡 VAVOO PLAYER
+      <span class="logo-bracket">]</span>
+    </div>
+    <select id="groupSelect" class="group-select">
+      <option value="Italy">Italy</option>
+      <option value="France">France</option>
+      <option value="Germany">Germany</option>
+      <option value="Spain">Spain</option>
+      <option value="United Kingdom">United Kingdom</option>
+    </select>
+    <div id="statusHeader">caricamento...</div>
+    <button class="btn-reload" id="forceReload">⟳ Ricarica</button>
+  </div>
+
+  <div class="container">
+    <div class="search-bar">
+      <input type="text" id="searchInput" placeholder="🔍 Cerca canale...">
+      <button class="clear-btn" id="clearSearch">✕</button>
+      <span class="result-count" id="resultCount"></span>
+    </div>
+    <div class="category-label">
+      |IT| ✪ CANALI VAVOO
+      <span id="channelCount"
+        style="font-family:'Share Tech Mono',monospace; font-size:11px; color:var(--muted); font-weight:400; letter-spacing:1px; margin-left:10px;">//
+        0 canali</span>
+    </div>
+    <div id="channelGrid" class="channel-grid">
+      <div class="loading">
+        <div class="spinner"></div>
+        <div class="loading-text">CARICAMENTO_CANALI...</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="video-container">
+    <button id="close-player" tabindex="0">✕ Chiudi</button>
+    <video id="video" autoplay playsinline></video>
+    <div id="overlay"></div>
+    <div id="unmute-hint">🔊 Tocca per attivare l'audio</div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+
+  <script>
+    // ═══════════════════════════════════════════════════════════
+    //  ⚙️  CONFIGURAZIONE
+    // ═══════════════════════════════════════════════════════════
+    const VAVOO_WORKER_BASE = "https://vavoo.papadipeppe.workers.dev";
+    // ═══════════════════════════════════════════════════════════
+
+    // ── Parametri URL per AUTOPLAY ──
+    //   ?play=1                → avvia il primo canale
+    //   ?ch=Nome%20Canale      → avvia il canale indicato
+    //   ?ch=Nome&mute=0        → prova con audio (può essere bloccato)
+    //   ?group=France          → forza un gruppo
+    const params   = new URLSearchParams(location.search);
+    const AUTO_CH  = params.get("ch");
+    const AUTOPLAY = params.get("play");
+    const AUTOMUTE = params.get("mute") !== "0";   // default: muto
+    const AUTO_GROUP = params.get("group");
+
+    const channelGrid = document.getElementById("channelGrid");
+    const videoContainer = document.getElementById("video-container");
+    const video = document.getElementById("video");
+    const overlay = document.getElementById("overlay");
+    const statusHeader = document.getElementById("statusHeader");
+    const groupSelect = document.getElementById("groupSelect");
+    const closeBtnEl = document.getElementById("close-player");
+    const unmuteHint = document.getElementById("unmute-hint");
+
+    let hlsInstance = null;
+    let hideControlsTimeout = null;
+    let currentChannels = [];
+    let searchQuery = "";
+    let autoplayDone = false;   // evita doppio autoplay
+
+    // ============================================================
+    // UTILITY
+    // ============================================================
+    function showOverlay(text, timeout = 3500) {
+      overlay.textContent = text;
+      overlay.style.display = 'block';
+      clearTimeout(overlay._t);
+      overlay._t = setTimeout(() => overlay.style.display = 'none', timeout);
+    }
+
+    function showControls() {
+      videoContainer.classList.add('show-controls');
+      clearTimeout(hideControlsTimeout);
+      hideControlsTimeout = setTimeout(() => {
+        videoContainer.classList.remove('show-controls');
+        if (document.activeElement === closeBtnEl) closeBtnEl.blur();
+      }, 3000);
+    }
+
+    function normalize(s) {
+      return (s || "").toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    }
+
+    // ============================================================
+    // AUTOPLAY
+    // ============================================================
+    function maybeAutoplay() {
+      if (autoplayDone) return;
+      if (!(AUTOPLAY === "1" || AUTO_CH)) return;
+      if (!currentChannels.length) return;
+
+      autoplayDone = true;
+
+      let target = null;
+      if (AUTO_CH) {
+        const q = normalize(decodeURIComponent(AUTO_CH));
+        target = currentChannels.find(c => normalize(c.name) === q)
+              || currentChannels.find(c => normalize(c.name).includes(q));
+      } else {
+        target = currentChannels[0];
+      }
+
+      if (!target) {
+        showOverlay(`⚠️ Canale "${AUTO_CH}" non trovato`, 4000);
+        return;
+      }
+
+      console.log("▶️ Autoplay:", target.name, "mute =", AUTOMUTE);
+      // piccolo delay per far montare le card
+      setTimeout(() => playVavoo(target, AUTOMUTE), 300);
+    }
+
+    // ============================================================
+    // CARICAMENTO CANALI
+    // ============================================================
+    async function loadChannels(group) {
+      channelGrid.innerHTML = `
+    <div class="loading">
+      <div class="spinner"></div>
+      <div class="loading-text">CARICAMENTO ${group.toUpperCase()}...</div>
+    </div>`;
+      statusHeader.textContent = "caricamento...";
+
+      try {
+        const resp = await fetch(`${VAVOO_WORKER_BASE}/channels?group=${encodeURIComponent(group)}`);
+        if (!resp.ok) throw new Error(`Worker HTTP ${resp.status}`);
+        const data = await resp.json();
+
+        if (data.error) throw new Error(data.error);
+        if (!data.items || data.items.length === 0) throw new Error("Nessun canale per questo gruppo");
+
+        currentChannels = data.items.map(it => ({
+          name: it.name || "?",
+          logo: it.thumbnail || it.image || "",
+          vavooUrl: it.url || ""
+        })).filter(c => c.vavooUrl);
+
+        console.log(`📡 Vavoo ${group}: ${currentChannels.length} canali`);
+        sessionStorage.setItem("vavoo_group", group);
+        sessionStorage.setItem("vavoo_channels", JSON.stringify(currentChannels));
+
+        searchQuery = "";
+        document.getElementById("searchInput").value = "";
+
+        renderFiltered();
+        statusHeader.textContent = `${currentChannels.length} canali`;
+
+        // ▶️ Autoplay se richiesto via URL
+        maybeAutoplay();
+      } catch (err) {
+        console.error("Errore caricamento:", err);
+        channelGrid.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">⚠️</div>
+        <div class="empty-state-text">${err.message}</div>
+      </div>`;
+        statusHeader.textContent = "errore";
+      }
+    }
+
+    // ============================================================
+    // RENDER
+    // ============================================================
+    function getFilteredChannels() {
+      if (!searchQuery) return currentChannels;
+      const q = normalize(searchQuery);
+      return currentChannels.filter(ch => normalize(ch.name).includes(q));
+    }
+
+    function renderFiltered() {
+      const filtered = getFilteredChannels();
+
+      const countEl = document.getElementById("channelCount");
+      if (countEl) {
+        countEl.textContent = searchQuery
+          ? `// ${filtered.length} / ${currentChannels.length} canali`
+          : `// ${currentChannels.length} canali`;
+      }
+      document.getElementById("resultCount").textContent =
+        searchQuery ? `${filtered.length} risultati` : "";
+
+      if (filtered.length === 0) {
+        channelGrid.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">🔍</div>
+        <div class="empty-state-text">${searchQuery ? `Nessun canale per "${searchQuery}"` : "Nessun canale"}</div>
+      </div>`;
+        return;
+      }
+
+      channelGrid.innerHTML = "";
+      filtered.forEach(ch => {
+        const card = document.createElement("div");
+        card.className = "channel-card";
+        card.setAttribute("tabindex", "0");
+
+        const logoHtml = ch.logo
+          ? `<img src="${ch.logo}" alt="" class="channel-logo" onerror="this.style.display='none'; this.parentElement.querySelector('.channel-placeholder').style.display='flex';">
+         <div class="channel-placeholder" style="display:none;">${ch.name}</div>`
+          : `<div class="channel-placeholder">${ch.name}</div>`;
+
+        card.innerHTML = `
+      <div class="channel-logo-wrapper">
+        ${logoHtml}
+        <div class="channel-info"><div class="channel-name">${ch.name}</div></div>
+      </div>
+      <div class="play-overlay"><div class="play-icon"></div></div>`;
+
+        card.addEventListener("click", () => playVavoo(ch));
+        card.addEventListener("keydown", e => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            playVavoo(ch);
+          }
+        });
+        channelGrid.appendChild(card);
+      });
+    }
+
+    // ============================================================
+    // PLAYER
+    // ============================================================
+    function closePlayer() {
+      videoContainer.classList.remove('active', 'show-controls');
+      document.body.style.overflow = "";
+      clearTimeout(hideControlsTimeout);
+      unmuteHint.classList.remove('show');
+
+      if (document.activeElement === closeBtnEl) closeBtnEl.blur();
+
+      if (hlsInstance) {try {hlsInstance.destroy();} catch (e) { } hlsInstance = null;}
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
+
+      setTimeout(() => {
+        const firstCard = document.querySelector('.channel-card');
+        if (firstCard) firstCard.focus();
+      }, 100);
+    }
+
+    async function playVavoo(ch, mute = false) {
+      video.muted = mute;
+      videoContainer.classList.add('active');
+      document.body.style.overflow = "hidden";
+      showControls();
+
+      // Mostra hint di unmute se partiamo muti
+      if (mute) {
+        unmuteHint.classList.add('show');
+      } else {
+        unmuteHint.classList.remove('show');
+      }
+
+      // Al primo gesto utente, smuta
+      const unmute = () => {
+        if (video.muted) {
+          video.muted = false;
+          unmuteHint.classList.remove('show');
+          showOverlay("🔊 Audio attivato", 2000);
+        }
+        videoContainer.removeEventListener('click', unmute);
+        videoContainer.removeEventListener('touchstart', unmute);
+      };
+      videoContainer.addEventListener('click', unmute, { once: true });
+      videoContainer.addEventListener('touchstart', unmute, { once: true });
+      unmuteHint.addEventListener('click', (e) => {
+        e.stopPropagation();
+        unmute();
+      }, { once: true });
+
+      showOverlay(`🔎 Risoluzione: ${ch.name}...`, 30000);
+
+      videoContainer.onmousemove = showControls;
+      videoContainer.ontouchstart = showControls;
+
+      try {
+        const resolveUrl = `${VAVOO_WORKER_BASE}/resolve?url=${encodeURIComponent(ch.vavooUrl)}`;
+        console.log("🎬 Resolve:", resolveUrl);
+        const resp = await fetch(resolveUrl);
+        if (!resp.ok) throw new Error(`Worker HTTP ${resp.status}`);
+
+        const data = await resp.json();
+        if (!data.url) throw new Error(data.error || "Nessun URL risolto");
+
+        const streamUrl = data.url;
+        console.log("✅ URL:", streamUrl);
+
+        if (streamUrl.includes(".m3u8")) {
+          playHLS(streamUrl);
+        } else if (streamUrl.includes(".ts")) {
+          showOverlay("⚠️ Stream TS — non supportato nativamente dal browser", 5000);
+          video.src = streamUrl;
+          video.play().catch(() => showOverlay("❌ TS non riproducibile"));
+        } else {
+          playHLS(streamUrl);
+        }
+      } catch (err) {
+        console.error("Errore:", err);
+        showOverlay(`❌ ${err.message}`, 5000);
+      }
+    }
+
+    function playHLS(url) {
+      if (hlsInstance) {try {hlsInstance.destroy();} catch (e) { } hlsInstance = null;}
+
+      if (Hls.isSupported()) {
+        hlsInstance = new Hls({enableWorker: true, lowLatencyMode: true, manifestLoadingTimeOut: 15000});
+        hlsInstance.on(Hls.Events.ERROR, (event, data) => {
+          if (data.fatal) {
+            if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hlsInstance.startLoad();
+            else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hlsInstance.recoverMediaError();
+            else {showOverlay("❌ Errore HLS", 4000); hlsInstance.destroy();}
+          }
+        });
+        hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+          video.play().then(() => showOverlay("✅ Riproduzione avviata"))
+            .catch(() => showOverlay("⚠️ Tocca per avviare"));
+        });
+        hlsInstance.loadSource(url);
+        hlsInstance.attachMedia(video);
+      } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+        video.src = url;
+        video.addEventListener("loadedmetadata", () => {
+          video.play().catch(() => { });
+          showOverlay("✅ Riproduzione avviata");
+        });
+      } else {
+        showOverlay("❌ Browser non supporta HLS");
+      }
+    }
+
+    // ============================================================
+    // UI — LISTENER
+    // ============================================================
+    closeBtnEl.addEventListener("click", closePlayer);
+
+    groupSelect.addEventListener("change", e => {
+      const group = e.target.value;
+      sessionStorage.removeItem("vavoo_channels");
+      autoplayDone = false;   // consenti autoplay sul nuovo gruppo
+      loadChannels(group);
+    });
+
+    document.getElementById("forceReload").addEventListener("click", () => {
+      sessionStorage.removeItem("vavoo_channels");
+      autoplayDone = false;
+      loadChannels(groupSelect.value);
+    });
+
+    document.getElementById("searchInput").addEventListener("input", e => {
+      searchQuery = e.target.value.trim();
+      renderFiltered();
+    });
+
+    document.getElementById("clearSearch").addEventListener("click", () => {
+      const inp = document.getElementById("searchInput");
+      inp.value = "";
+      searchQuery = "";
+      renderFiltered();
+      inp.focus();
+    });
+
+    // ============================================================
+    // TASTIERA GLOBALE
+    // ============================================================
+    document.addEventListener("keydown", e => {
+      const isPlayerActive = videoContainer.classList.contains('active');
+
+      if (isPlayerActive) {
+        const focusIsOnBtn = document.activeElement === closeBtnEl;
+        const isArrow = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key);
+
+        if (e.key === "Escape") {
+          e.preventDefault();
+          closePlayer();
+          return;
+        }
+
+        if (isArrow) {
+          e.preventDefault();
+          videoContainer.classList.add('show-controls');
+          clearTimeout(hideControlsTimeout);
+          closeBtnEl.focus();
+          hideControlsTimeout = setTimeout(() => {
+            videoContainer.classList.remove('show-controls');
+            if (document.activeElement === closeBtnEl) closeBtnEl.blur();
+          }, 5000);
+          return;
+        }
+
+        if ((e.key === "Enter" || e.key === " ") && focusIsOnBtn) {
+          e.preventDefault();
+          e.stopPropagation();
+          closePlayer();
+          return;
+        }
+
+        if (e.key === "Tab") {
+          e.preventDefault();
+          closeBtnEl.focus();
+          return;
+        }
+
+        return;
+      }
+
+      if (e.key === "Escape" && document.activeElement === document.getElementById("searchInput")) {
+        e.preventDefault();
+        const inp = document.getElementById("searchInput");
+        inp.value = "";
+        searchQuery = "";
+        renderFiltered();
+        inp.blur();
+      }
+    });
+
+    // ============================================================
+    // AVVIO
+    // ============================================================
+    window.addEventListener("load", () => {
+      const savedGroup = AUTO_GROUP || sessionStorage.getItem("vavoo_group") || "Italy";
+      groupSelect.value = savedGroup;
+
+      // Se c'è un autoplay richiesto, NON usare la cache (vogliamo dati freschi)
+      const wantAutoplay = (AUTOPLAY === "1" || AUTO_CH);
+
+      if (!wantAutoplay) {
+        try {
+          const cached = sessionStorage.getItem("vavoo_channels");
+          if (cached) {
+            currentChannels = JSON.parse(cached);
+            if (currentChannels.length > 0) {
+              renderFiltered();
+              statusHeader.textContent = `${currentChannels.length} canali (cache)`;
+              return;
+            }
+          }
+        } catch (e) { }
+      }
+
+      loadChannels(savedGroup);
+    });
+
+    // ============================================================
+    // MATRIX RAIN
+    // ============================================================
+    (function () {
+      const canvas = document.getElementById('matrix-canvas');
+      const ctx = canvas.getContext('2d');
+      let W, H, cols, drops;
+      const chars = '01アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン';
+      function resize() {W = canvas.width = innerWidth; H = canvas.height = innerHeight; cols = Math.floor(W / 16); drops = Array(cols).fill(1);}
+      resize();
+      addEventListener('resize', resize);
+      function draw() {
+        ctx.fillStyle = 'rgba(13,2,8,0.05)';
+        ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = '#00ff41';
+        ctx.font = '14px Share Tech Mono, monospace';
+        drops.forEach((y, i) => {
+          const ch = chars[Math.floor(Math.random() * chars.length)];
+          ctx.fillText(ch, i * 16, y * 16);
+          if (y * 16 > H && Math.random() > 0.975) drops[i] = 0;
+          drops[i]++;
+        });
+      }
+      setInterval(draw, 55);
+    })();
+  </script>
+</body>
+
+</html>
