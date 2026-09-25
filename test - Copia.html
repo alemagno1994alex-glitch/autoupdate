@@ -242,47 +242,21 @@
           abr: { enabled: true }
         });
 
-		await player.load(manifestUrl);
-		video.play();
+        await player.load(manifestUrl);
+        video.play();
 
-		// ===== PREFERENZA LINGUA AUDIO (default: italiano) =====
-		const preferLang = (urlParams.get('lang') || 'it').toLowerCase().trim();
-		try {
-		  // Shaka espone le lingue come codici ISO 639-1/2 ("it", "en", "ita", ...)
-		  const audioLangs = player.getAudioLanguages();
-		  console.log('🎧 Lingue audio disponibili:', audioLangs);
-
-		  // Match in ordine di priorità:
-		  // 1. esatto  → "it"
-		  // 2. prefisso → "it-IT", "ita"
-		  // 3. regex   → "italian", "italiano"
-		  const match =
-			   audioLangs.find(l => l.toLowerCase() === preferLang)
-			|| audioLangs.find(l => l.toLowerCase().startsWith(preferLang))
-			|| audioLangs.find(l => /^(it|ita)\b/i.test(l))
-			|| audioLangs.find(l => /ital/i.test(l));
-
-		  if (match) {
-			player.selectAudioLanguage(match);
-			console.log('✅ Lingua audio selezionata:', match);
-		  } else {
-			console.warn('⚠️ Nessuna traccia italiana trovata, uso il default');
-		  }
-		} catch (e) {
-		  console.warn('Errore selezione lingua audio:', e);
-		}
-
-		const tracks = player.getVariantTracks();
-		const activeTrack = tracks.find(t => t.active);
-		if (activeTrack) {
-           // showOverlay(`🎬 ${activeTrack.height || 'Auto'}p | 🌍 ${activeTrack.language.toUpperCase()}`);
+        const tracks = player.getVariantTracks();
+        const activeTrack = tracks.find(t => t.active);
+        if (activeTrack) {
+          // showOverlay(`🎬 ${activeTrack.height || 'Auto'}p | 🌍 ${activeTrack.language.toUpperCase()}`);
         }
       } catch (e) {
         showOverlay("⚠️ Errore nel caricamento");
         console.error("Errore:", e);
       }
 
-   
+      
+
       // ===== KEYBOARD CONTROLS =====
       document.addEventListener('keydown', (event) => {
         const key = event.key.toLowerCase();
