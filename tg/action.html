@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Vavoo Player — Canale Fisso</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0d0208;
+      --border: #0d3b0d;
+      --border-bright: #1a6b1a;
+      --accent: #00ff41;
+      --text-dim: #008f11;
+      --muted: #005900;
+      --glow: 0 0 10px rgba(0, 255, 65, 0.6), 0 0 30px rgba(0, 255, 65, 0.2);
+      --glow-soft: 0 0 8px rgba(0, 255, 65, 0.3);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--accent);
+      font-family: 'Share Tech Mono', monospace;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    #matrix-canvas {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 0;
+      opacity: 0.08;
+      pointer-events: none;
+    }
+
+    .grid-overlay {
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0, 255, 65, 0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 255, 65, 0.04) 1px, transparent 1px);
+      background-size: 24px 24px;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    #video-container {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh;
+      background: #000;
+      z-index: 9999;
+      overflow: hidden;
+      overscroll-behavior: contain;
+    }
+
+    video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #000;
+      display: block;
+    }
+
+    #overlay {
+      position: fixed;
+      top: calc(20px + env(safe-area-inset-top));
+      left: calc(20px + env(safe-area-inset-left));
+      background: rgba(0, 20, 0, 0.9);
+      color: var(--accent);
+      padding: 10px 15px;
+      border-radius: 2px;
+      border: 1px solid var(--border-bright);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 14px;
+      z-index: 10000;
+      max-width: 80vw;
+      word-break: break-all;
+      transition: opacity 0.3s;
+    }
+
+    #overlay.hide { opacity: 0; pointer-events: none; }
+
+    #channel-label {
+      position: fixed;
+      top: calc(20px + env(safe-area-inset-top));
+      right: calc(20px + env(safe-area-inset-right));
+      background: rgba(0, 20, 0, 0.9);
+      color: var(--accent);
+      padding: 10px 18px;
+      border: 1px solid var(--border-bright);
+      font-family: 'Orbitron', monospace;
+      font-size: 13px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      z-index: 10000;
+      text-shadow: var(--glow-soft);
+    }
+
+    #unmute-hint {
+      position: fixed;
+      bottom: calc(30px + env(safe-area-inset-bottom));
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 20, 0, 0.9);
+      color: var(--accent);
+      border: 1px solid var(--border-bright);
+      padding: 12px 22px;
+      font-family: 'Orbitron', monospace;
+      font-size: 13px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      z-index: 10002;
+      cursor: pointer;
+      display: none;
+      box-shadow: var(--glow);
+    }
+
+    #unmute-hint.show {
+      display: block;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.7; }
+      50% { opacity: 1; }
+    }
+
+    /* Schermata di caricamento iniziale */
+    #boot {
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      z-index: 20000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      color: var(--accent);
+      font-family: 'Orbitron', monospace;
+      letter-spacing: 3px;
+    }
+
+    #boot.hide { display: none; }
+
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+
+<body>
+
+  <canvas id="matrix-canvas"></canvas>
+  <div class="grid-overlay"></div>
+
+  <div id="video-container">
+    <video id="video" autoplay playsinline></video>
+    <div id="overlay">Inizializzazione...</div>
+    <div id="channel-label">—</div>
+    <div id="unmute-hint">🔊 Tocca per attivare l'audio</div>
+  </div>
+
+  <div id="boot">
+    <div class="spinner"></div>
+    <div id="boot-text">CONNESSIONE...</div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+
+  <script>
+    // ═══════════════════════════════════════════════════════════
+    //  ⚙️  MODIFICA QUI — CONFIGURAZIONE CANALE FISSO
+    // ═══════════════════════════════════════════════════════════
+
+    // 1) Nome visualizzato in alto a destra
+    const CHANNEL_NAME = "SKY CINEMA ACTION (6)";
+
+    // 2) Gruppo Vavoo da cui pescare il canale
+    const CHANNEL_GROUP = "Italy";
+
+    // 3) Come trovare il canale: pezzo di nome da cercare (case-insensitive)
+    //    Deve matchare il nome esatto che restituisce il worker.
+    //    Es: "SKY CINEMA ACTION" oppure "ACTION (6)" oppure "cinema action"
+    const CHANNEL_MATCH = "SKY CINEMA ACTION";
+
+    // 4) Muto all'avvio? (true = sì, l'utente deve toccare per sentire l'audio)
+    const START_MUTED = true;
+
+    // 5) Se il worker restituisce più match, prendi il primo che contiene questo
+    //    ulteriore filtro (utile per distinguere "(6)" da altri). Lascia "" per ignorare.
+    const CHANNEL_EXTRA_FILTER = "(6)";
+
+    // ═══════════════════════════════════════════════════════════
+
+    const VAVOO_WORKER_BASE = "https://vavoo.papadipeppe.workers.dev";
+
+    const video = document.getElementById("video");
+    const overlay = document.getElementById("overlay");
+    const channelLabel = document.getElementById("channel-label");
+    const unmuteHint = document.getElementById("unmute-hint");
+    const boot = document.getElementById("boot");
+    const bootText = document.getElementById("boot-text");
+
+    let hlsInstance = null;
+
+    // ── Helpers ──
+    function normalize(s) {
+      return (s || "").toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    }
+
+    function setOverlay(text, timeout = 0) {
+      overlay.textContent = text;
+      overlay.classList.remove('hide');
+      clearTimeout(overlay._t);
+      if (timeout > 0) {
+        overlay._t = setTimeout(() => overlay.classList.add('hide'), timeout);
+      }
+    }
+
+    function hideBoot() {
+      boot.classList.add('hide');
+    }
+
+    // ── Unmute al primo tocco ──
+    function armUnmute() {
+      if (!START_MUTED) return;
+      unmuteHint.classList.add('show');
+
+      const unmute = () => {
+        if (video.muted) {
+          video.muted = false;
+          unmuteHint.classList.remove('show');
+          setOverlay("🔊 Audio attivato", 2000);
+        }
+        document.removeEventListener('click', unmute);
+        document.removeEventListener('touchstart', unmute);
+      };
+      document.addEventListener('click', unmute);
+      document.addEventListener('touchstart', unmute);
+      unmuteHint.addEventListener('click', (e) => {
+        e.stopPropagation();
+        unmute();
+      }, { once: true });
+    }
+
+    // ── HLS ──
+    function playHLS(url) {
+      if (hlsInstance) { try { hlsInstance.destroy(); } catch (e) {} hlsInstance = null; }
+
+      if (Hls.isSupported()) {
+        hlsInstance = new Hls({
+          enableWorker: true,
+          lowLatencyMode: true,
+          manifestLoadingTimeOut: 15000,
+          liveSyncDurationCount: 3
+        });
+        hlsInstance.on(Hls.Events.ERROR, (event, data) => {
+          if (data.fatal) {
+            if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+              setOverlay("⚠️ Riconnessione...", 3000);
+              hlsInstance.startLoad();
+            } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+              hlsInstance.recoverMediaError();
+            } else {
+              setOverlay("❌ Errore HLS, riprovo...", 3000);
+              hlsInstance.destroy();
+              setTimeout(() => playHLS(url), 4000);
+            }
+          }
+        });
+        hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+          video.play()
+            .then(() => setOverlay("✅ In onda", 2000))
+            .catch(() => setOverlay("⚠️ Tocca per avviare", 4000));
+        });
+        hlsInstance.loadSource(url);
+        hlsInstance.attachMedia(video);
+      } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+        // Safari nativo
+        video.src = url;
+        video.addEventListener("loadedmetadata", () => {
+          video.play().catch(() => {});
+          setOverlay("✅ In onda", 2000);
+        });
+      } else {
+        setOverlay("❌ Browser non supporta HLS", 5000);
+      }
+    }
+
+    // ── Avvio ──
+    async function start() {
+      try {
+        bootText.textContent = "RICERCA CANALE...";
+        setOverlay("🔎 Ricerca canale...");
+
+        const resp = await fetch(`${VAVOO_WORKER_BASE}/channels?group=${encodeURIComponent(CHANNEL_GROUP)}`);
+        if (!resp.ok) throw new Error(`Worker HTTP ${resp.status}`);
+        const data = await resp.json();
+        if (data.error) throw new Error(data.error);
+        if (!data.items || data.items.length === 0) throw new Error("Nessun canale nel gruppo");
+
+        // Trova il canale
+        const q = normalize(CHANNEL_MATCH);
+        const extra = normalize(CHANNEL_EXTRA_FILTER);
+
+        let candidates = data.items.filter(it => normalize(it.name).includes(q));
+        if (extra) {
+          const narrowed = candidates.filter(it => normalize(it.name).includes(extra));
+          if (narrowed.length > 0) candidates = narrowed;
+        }
+
+        if (candidates.length === 0) {
+          throw new Error(`Canale "${CHANNEL_NAME}" non trovato`);
+        }
+
+        const target = candidates[0];
+        console.log("✅ Canale trovato:", target.name);
+        channelLabel.textContent = target.name;
+
+        bootText.textContent = "RISOLUZIONE STREAM...";
+        setOverlay(`🔎 Risoluzione: ${target.name}...`);
+
+        // Resolve
+        const resolveUrl = `${VAVOO_WORKER_BASE}/resolve?url=${encodeURIComponent(target.url)}`;
+        const rResp = await fetch(resolveUrl);
+        if (!rResp.ok) throw new Error(`Worker HTTP ${rResp.status}`);
+        const rData = await rResp.json();
+        if (!rData.url) throw new Error(rData.error || "Nessun URL risolto");
+
+        console.log("✅ Stream URL:", rData.url);
+
+        // Applica mute prima del play
+        video.muted = START_MUTED;
+        if (START_MUTED) armUnmute();
+
+        hideBoot();
+        playHLS(rData.url);
+
+      } catch (err) {
+        console.error("Errore:", err);
+        bootText.textContent = "ERRORE";
+        setOverlay(`❌ ${err.message}`, 8000);
+        // Riprova dopo 10 secondi
+        setTimeout(() => {
+          boot.classList.remove('hide');
+          start();
+        }, 10000);
+      }
+    }
+
+    // ── Autorecovery se lo stream si blocca ──
+    video.addEventListener("stalled", () => {
+      console.warn("⚠️ Stream in stallo, riavvio...");
+      if (hlsInstance) hlsInstance.startLoad();
+    });
+
+    video.addEventListener("ended", () => {
+      console.log("🔁 Stream terminato, riavvio...");
+      setTimeout(() => start(), 2000);
+    });
+
+    // ── Via! ──
+    window.addEventListener("load", start);
+
+    // ═══════════════════════════════════════════════════════════
+    // MATRIX RAIN
+    // ═══════════════════════════════════════════════════════════
+    (function () {
+      const canvas = document.getElementById('matrix-canvas');
+      const ctx = canvas.getContext('2d');
+      let W, H, cols, drops;
+      const chars = '01アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン';
+      function resize() {
+        W = canvas.width = innerWidth;
+        H = canvas.height = innerHeight;
+        cols = Math.floor(W / 16);
+        drops = Array(cols).fill(1);
+      }
+      resize();
+      addEventListener('resize', resize);
+      function draw() {
+        ctx.fillStyle = 'rgba(13,2,8,0.05)';
+        ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = '#00ff41';
+        ctx.font = '14px Share Tech Mono, monospace';
+        drops.forEach((y, i) => {
+          const ch = chars[Math.floor(Math.random() * chars.length)];
+          ctx.fillText(ch, i * 16, y * 16);
+          if (y * 16 > H && Math.random() > 0.975) drops[i] = 0;
+          drops[i]++;
+        });
+      }
+      setInterval(draw, 55);
+    })();
+  </script>
+</body>
+
+</html>
