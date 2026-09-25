@@ -473,7 +473,6 @@
       background: rgba(0, 255, 65, 0.12);
     }
 
-    /* Badge "muto" per ricordare all'utente di toccare per l'audio */
     #unmute-hint {
       position: fixed;
       bottom: calc(20px + env(safe-area-inset-bottom));
@@ -566,18 +565,14 @@
     // ═══════════════════════════════════════════════════════════
     //  ⚙️  CONFIGURAZIONE
     // ═══════════════════════════════════════════════════════════
-    const VAVOO_WORKER_BASE = "https://vavoo.papadipeppe.workers.dev";
+    const VAVOO_WORKER_BASE = "https://vavoo2.papadipeppe.workers.dev";
     // ═══════════════════════════════════════════════════════════
 
     // ── Parametri URL per AUTOPLAY ──
-    //   ?play=1                → avvia il primo canale
-    //   ?ch=Nome%20Canale      → avvia il canale indicato
-    //   ?ch=Nome&mute=0        → prova con audio (può essere bloccato)
-    //   ?group=France          → forza un gruppo
     const params   = new URLSearchParams(location.search);
     const AUTO_CH  = params.get("ch");
     const AUTOPLAY = params.get("play");
-    const AUTOMUTE = params.get("mute") !== "0";   // default: muto
+    const AUTOMUTE = params.get("mute") !== "0";
     const AUTO_GROUP = params.get("group");
 
     const channelGrid = document.getElementById("channelGrid");
@@ -593,7 +588,7 @@
     let hideControlsTimeout = null;
     let currentChannels = [];
     let searchQuery = "";
-    let autoplayDone = false;   // evita doppio autoplay
+    let autoplayDone = false;
 
     // ============================================================
     // UTILITY
@@ -644,7 +639,6 @@
       }
 
       console.log("▶️ Autoplay:", target.name, "mute =", AUTOMUTE);
-      // piccolo delay per far montare le card
       setTimeout(() => playVavoo(target, AUTOMUTE), 300);
     }
 
@@ -683,7 +677,6 @@
         renderFiltered();
         statusHeader.textContent = `${currentChannels.length} canali`;
 
-        // ▶️ Autoplay se richiesto via URL
         maybeAutoplay();
       } catch (err) {
         console.error("Errore caricamento:", err);
@@ -783,14 +776,12 @@
       document.body.style.overflow = "hidden";
       showControls();
 
-      // Mostra hint di unmute se partiamo muti
       if (mute) {
         unmuteHint.classList.add('show');
       } else {
         unmuteHint.classList.remove('show');
       }
 
-      // Al primo gesto utente, smuta
       const unmute = () => {
         if (video.muted) {
           video.muted = false;
@@ -813,26 +804,26 @@
       videoContainer.ontouchstart = showControls;
 
       try {
-        const resolveUrl = `${VAVOO_WORKER_BASE}/resolve?url=${encodeURIComponent(ch.vavooUrl)}`;
-        console.log("🎬 Resolve:", resolveUrl);
-        const resp = await fetch(resolveUrl);
+        // ═══════════════════════════════════════════════════════
+        // ✅ MODIFICA CHIAVE: usa /stream invece di /resolve
+        //    Il worker fa resolve + proxy in una sola chiamata
+        //    e restituisce un URL HTTPS già proxato → niente Mixed Content
+        // ═══════════════════════════════════════════════════════
+        const streamApiUrl = `${VAVOO_WORKER_BASE}/stream?url=${encodeURIComponent(ch.vavooUrl)}`;
+        console.log("🎬 Stream API:", streamApiUrl);
+        const resp = await fetch(streamApiUrl);
         if (!resp.ok) throw new Error(`Worker HTTP ${resp.status}`);
 
         const data = await resp.json();
         if (!data.url) throw new Error(data.error || "Nessun URL risolto");
 
+        // data.url è già l'URL HTTPS proxato → pronti per hls.js
         const streamUrl = data.url;
-        console.log("✅ URL:", streamUrl);
+        console.log("✅ URL proxato:", streamUrl);
+        console.log("🔒 URL originale (HTTP):", data.original);
 
-        if (streamUrl.includes(".m3u8")) {
-          playHLS(streamUrl);
-        } else if (streamUrl.includes(".ts")) {
-          showOverlay("⚠️ Stream TS — non supportato nativamente dal browser", 5000);
-          video.src = streamUrl;
-          video.play().catch(() => showOverlay("❌ TS non riproducibile"));
-        } else {
-          playHLS(streamUrl);
-        }
+        playHLS(streamUrl);
+
       } catch (err) {
         console.error("Errore:", err);
         showOverlay(`❌ ${err.message}`, 5000);
@@ -843,12 +834,26 @@
       if (hlsInstance) {try {hlsInstance.destroy();} catch (e) { } hlsInstance = null;}
 
       if (Hls.isSupported()) {
-        hlsInstance = new Hls({enableWorker: true, lowLatencyMode: true, manifestLoadingTimeOut: 15000});
+        hlsInstance = new Hls({
+          enableWorker: true,
+          lowLatencyMode: true,
+          manifestLoadingTimeOut: 20000,
+          // Evita problemi con proxy
+          xhrSetup: (xhr) => {
+            xhr.withCredentials = false;
+          }
+        });
         hlsInstance.on(Hls.Events.ERROR, (event, data) => {
           if (data.fatal) {
-            if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hlsInstance.startLoad();
-            else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hlsInstance.recoverMediaError();
-            else {showOverlay("❌ Errore HLS", 4000); hlsInstance.destroy();}
+            if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+              showOverlay("⚠️ Riconnessione...", 2500);
+              hlsInstance.startLoad();
+            } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+              hlsInstance.recoverMediaError();
+            } else {
+              showOverlay("❌ Errore HLS", 4000);
+              hlsInstance.destroy();
+            }
           }
         });
         hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -876,7 +881,7 @@
     groupSelect.addEventListener("change", e => {
       const group = e.target.value;
       sessionStorage.removeItem("vavoo_channels");
-      autoplayDone = false;   // consenti autoplay sul nuovo gruppo
+      autoplayDone = false;
       loadChannels(group);
     });
 
@@ -960,7 +965,6 @@
       const savedGroup = AUTO_GROUP || sessionStorage.getItem("vavoo_group") || "Italy";
       groupSelect.value = savedGroup;
 
-      // Se c'è un autoplay richiesto, NON usare la cache (vogliamo dati freschi)
       const wantAutoplay = (AUTOPLAY === "1" || AUTO_CH);
 
       if (!wantAutoplay) {
