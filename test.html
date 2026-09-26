@@ -115,60 +115,76 @@
 
     // ===== GESTIONE RISOLUZIONE CON SOLO FRECCIA SU =====
     function cycleResolution() {
-      if (!player) return;
+	  if (!player) return;
 
-      const tracks = player.getVariantTracks();
-      if (tracks.length === 0) return;
+	  const allTracks = player.getVariantTracks();
+	  if (allTracks.length === 0) return;
 
-      // Se siamo in modalità Auto, passa al primo track manuale
-      if (isAutoResolution) {
-        isAutoResolution = false;
-        player.configure({ abr: { enabled: false } });
-        
-        // Seleziona il primo track disponibile
-        const firstTrack = tracks[0];
-        player.selectVariantTrack(firstTrack, true);
-        
-        const height = firstTrack.height || firstTrack.width || '?';
-        showOverlay(`🎬 ${height}p (MANUALE)`);
-        return;
-      }
+	  // 1) Qual è la lingua audio attiva? (preservala!)
+	  const activeTrack = allTracks.find(t => t.active);
+	  const preferredLang = activeTrack ? activeTrack.language : null;
 
-      // Se siamo in manuale, cicla al prossimo track
-      const activeTrack = tracks.find(t => t.active);
-      if (!activeTrack) {
-        // Se nessun track è attivo, torna ad Auto
-        setAutoResolution();
-        return;
-      }
+	  // 2) Tieni solo i variant con la stessa lingua audio
+	  let tracks = preferredLang
+		? allTracks.filter(t => t.language === preferredLang)
+		: allTracks;
 
-      const sameLangTracks = tracks.filter(t => t.language === activeTrack.language);
-      const currentIndex = sameLangTracks.findIndex(t => t.id === activeTrack.id);
-      const nextIndex = (currentIndex + 1) % sameLangTracks.length;
-      const nextTrack = sameLangTracks[nextIndex];
+	  // fallback: se per qualche motivo la lingua non ha variant, usa tutti
+	  if (tracks.length === 0) tracks = allTracks;
 
-      // Se siamo tornati al primo track dopo l'ultimo, torna ad Auto
-      if (nextIndex === 0 && currentIndex === sameLangTracks.length - 1) {
-        setAutoResolution();
-        return;
-      }
+	  // 3) Deduplica per altezza (così non cicli su 5 varianti 1080p uguali)
+	  const seen = new Set();
+	  const uniqueTracks = [];
+	  for (const t of tracks) {
+		const key = t.height || t.width || t.id;
+		if (!seen.has(key)) {
+		  seen.add(key);
+		  uniqueTracks.push(t);
+		}
+	  }
 
-      player.selectVariantTrack(nextTrack, true);
-      const height = nextTrack.height || nextTrack.width || '?';
-      showOverlay(`🎬 ${height}p (MANUALE)`);
-    }
+	  // 4) Cicla come prima
+	  if (isAutoResolution) {
+		isAutoResolution = false;
+		player.configure({ abr: { enabled: false } });
+		const firstTrack = uniqueTracks[0];
+		player.selectVariantTrack(firstTrack, true);
+		// 🔑 ri-applica la lingua audio dopo la selezione
+		if (preferredLang) player.selectAudioLanguage(preferredLang);
+		showOverlay(`🎬 ${firstTrack.height || firstTrack.width || '?'}p (MANUALE)`);
+		return;
+	  }
+
+	  const current = uniqueTracks.find(t => t.active) || uniqueTracks[0];
+	  const idx = uniqueTracks.findIndex(t => t.id === current.id);
+	  const nextIdx = (idx + 1) % uniqueTracks.length;
+
+	  // se siamo tornati al primo dopo l'ultimo → Auto
+	  if (nextIdx === 0 && idx === uniqueTracks.length - 1) {
+		setAutoResolution();
+		if (preferredLang) player.selectAudioLanguage(preferredLang);
+		return;
+	  }
+
+	  const nextTrack = uniqueTracks[nextIdx];
+	  player.selectVariantTrack(nextTrack, true);
+	  // 🔑 ri-applica la lingua audio
+	  if (preferredLang) player.selectAudioLanguage(preferredLang);
+
+	  showOverlay(`🎬 ${nextTrack.height || nextTrack.width || '?'}p (MANUALE)`);
+	}
 
     function setAutoResolution() {
-      isAutoResolution = true;
-      player.configure({ abr: { enabled: true } });
-      // Resetta la selezione manuale
-      const tracks = player.getVariantTracks();
-      const autoTrack = tracks.find(t => t.active);
-      if (!autoTrack && tracks.length > 0) {
-        player.selectVariantTrack(tracks[0], true);
-      }
-      showOverlay('📊 Risoluzione: AUTO');
-    }
+	  isAutoResolution = true;
+	  player.configure({ abr: { enabled: true } });
+
+	  // Ricorda la lingua prima di resettare
+	  const active = player.getVariantTracks().find(t => t.active);
+	  const lang = active ? active.language : null;
+
+	  if (lang) player.selectAudioLanguage(lang);
+	  showOverlay('📊 Risoluzione: AUTO');
+	}
 
     // ===== ALTRE FUNZIONI =====
     function changeLanguage(direction = 'next') {
