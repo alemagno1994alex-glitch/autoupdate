@@ -12,7 +12,7 @@ from typing import List, Dict
 # Legge le variabili d'ambiente; se non presenti o vuote, usa i default
 SOURCE_URL = os.getenv("SOURCE_URL")
 if not SOURCE_URL:
-    SOURCE_URL = "https://sportsonline.sl/prog.txt"
+    SOURCE_URL = "https://sportsonline.st/prog.txt"
 
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 GIST_ID = os.getenv("GIST_ID")
