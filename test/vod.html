@@ -275,7 +275,7 @@ function setHeroFocus(index){
   }
   heroFocusIndex = index;
   btns.forEach((b, i) => b.classList.toggle('focused', i === index));
-  btns[index].scrollIntoView({ behavior: 'smooth', block: 'center' });
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 /* ── SEARCH: attivazione e stati ── */
@@ -457,9 +457,7 @@ function renderHome(){
   });
 
   setTimeout(() => {
-    for (let i = 0; i < rows.length; i++){
-      if (rows[i].items.length > 0){ setFocus(i, 0); return; }
-    }
+    setHeroFocus(0);
   }, 120);
 }
 
