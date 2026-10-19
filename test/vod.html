@@ -26,9 +26,11 @@ header{position:sticky;top:0;z-index:100;
   -webkit-background-clip:text;-webkit-text-fill-color:transparent}
 .search-wrap{flex:1;max-width:520px;margin-left:auto;
   background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);
-  border-radius:30px;padding:10px 18px;display:flex;align-items:center;gap:10px;transition:.2s}
+  border-radius:30px;padding:10px 18px;display:flex;align-items:center;gap:10px;transition:.2s;
+  cursor:text}
 .search-wrap:focus-within{border-color:var(--primary)}
-.search-wrap.tv-focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(0,230,118,.25)}
+.search-wrap.tv-focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(0,230,118,.25);
+  outline:none !important}
 .search-wrap input{flex:1;background:transparent;border:none;color:#fff;
   font-family:inherit;font-size:1rem;outline:none}
 
@@ -142,9 +144,11 @@ header{position:sticky;top:0;z-index:100;
 
 <header>
   <div class="logo"><span>FILM & SERIE</span></div>
-  <div class="search-wrap focusable" id="search-wrap" tabindex="0">
+  <div class="search-wrap focusable" id="search-wrap" tabindex="0" onclick="onSearchWrapClick(event)">
     <i class="fas fa-search" style="color:#666"></i>
-    <input id="search" type="text" placeholder="Cerca film, serie, anno..." autocomplete="off">
+    <input id="search" type="text" placeholder="Cerca film, serie, anno..."
+           autocomplete="off" inputmode="search"
+           autocapitalize="off" autocorrect="off" spellcheck="false">
   </div>
 </header>
 
@@ -213,11 +217,34 @@ function getWatchUrl(it){
   return `${SC_BASE}/it/search?q=${encodeURIComponent(it.title || '')}`;
 }
 
+/* ═══════════════════ SEARCH ACTIVATION (Android) ═══════════════════ */
+const searchWrapEl = document.getElementById('search-wrap');
+const searchInputEl = document.getElementById('search');
+
+function activateSearch(){
+  // marca il wrapper come attivo (bordo verde)
+  searchWrapEl.classList.add('tv-focus');
+  // focus sull'input + click() per sbloccare la tastiera Android
+  searchInputEl.focus();
+  try { searchInputEl.click(); } catch(e) {}
+}
+
+function onSearchWrapClick(e){
+  // se il click è direttamente sull'input, lascia fare al browser
+  if (e.target === searchInputEl) return;
+  activateSearch();
+}
+
+// Quando l'input riceve/perde focus, aggiorna la classe visiva del wrapper
+searchInputEl.addEventListener('focus', () => {
+  searchWrapEl.classList.add('tv-focus');
+});
+searchInputEl.addEventListener('blur', () => {
+  searchWrapEl.classList.remove('tv-focus');
+});
+
 /* ═══════════════════ FOCUS / TASTIERA ═══════════════════ */
 function getFocusable(){
-  const root = activeView === 'details'
-    ? document.getElementById('details')
-    : document.getElementById('view-catalog') || document.body;
   const scope = activeView === 'details'
     ? document.getElementById('details')
     : document;
@@ -266,7 +293,6 @@ function moveFocus(direction){
     if (direction === 'UP'    && dy < -8) valid = true;
     if (direction === 'DOWN'  && dy >  8) valid = true;
     if (!valid) continue;
-    // distanza pesata: priorità all'asse del movimento
     let dist;
     if (direction === 'LEFT' || direction === 'RIGHT') {
       dist = Math.abs(dx) + Math.abs(dy) * 4;
@@ -332,14 +358,6 @@ function render(){
         </div>
       </div>`;
   }).join('');
-
-  // Se l'utente era sulla griglia, rimetti il focus sulla prima card
-  if (activeView === 'catalog'){
-    const first = document.querySelector('#grid .card');
-    if (first && !document.querySelector('.tv-focus')){
-      // non forzare il focus al primo render se l'utente sta navigando
-    }
-  }
 }
 
 /* ═══════════════════ DETAILS ═══════════════════ */
@@ -403,7 +421,6 @@ function openDetails(i){
   document.getElementById('details').classList.add('open');
   document.getElementById('details').scrollTop = 0;
 
-  // Focus sul back button come punto di partenza
   setTimeout(() => {
     const backBtn = document.getElementById('back-btn');
     if (backBtn) setFocus(backBtn);
@@ -417,7 +434,6 @@ function closeDetails(){
   activeView = 'catalog';
   clearFocus();
 
-  // Ripristina focus sulla card da cui eravamo partiti
   setTimeout(() => {
     if (lastFocusedInCatalog && document.contains(lastFocusedInCatalog)){
       setFocus(lastFocusedInCatalog);
@@ -516,22 +532,26 @@ async function loadEpisodes(it, seasonNum){
 /* ═══════════════════ TASTIERA ═══════════════════ */
 document.addEventListener('keydown', (e) => {
   const key = e.key;
+  const inputHasFocus = document.activeElement === searchInputEl;
+  const wrapperHasFocus = document.activeElement === searchWrapEl;
 
-  // Se l'utente sta scrivendo nella search
-  const input = document.getElementById('search');
-  const isTyping = document.activeElement === input;
-
-  // ENTER: attiva l'elemento con focus
+  /* ── ENTER ── */
   if (key === 'Enter'){
-    if (isTyping){
-      // dalla search: vai al primo risultato
-      const first = document.querySelector('#grid .card');
-      if (first){
-        e.preventDefault();
-        setFocus(first);
-      }
+    // ENTER sul wrapper → attiva la search (apre tastiera)
+    if (wrapperHasFocus){
+      e.preventDefault();
+      activateSearch();
       return;
     }
+    // ENTER sull'input → chiudi tastiera e vai al primo risultato
+    if (inputHasFocus){
+      e.preventDefault();
+      searchInputEl.blur();
+      const first = document.querySelector('#grid .card');
+      if (first) setFocus(first);
+      return;
+    }
+    // ENTER su un elemento focusabile → click
     const focused = document.querySelector('.tv-focus');
     if (focused){
       e.preventDefault();
@@ -540,9 +560,19 @@ document.addEventListener('keydown', (e) => {
     return;
   }
 
-  // ESC / BACKSPACE / Back: chiudi details o torna indietro
+  /* ── ESC / BACKSPACE ── */
   if (key === 'Escape' || key === 'Backspace'){
-    if (isTyping) return; // lascia funzionare backspace nella search
+    // backspace mentre scrivi: lascia cancellare
+    if (inputHasFocus && key === 'Backspace') return;
+    // ESC dall'input: esci, torna al wrapper
+    if (inputHasFocus && key === 'Escape'){
+      e.preventDefault();
+      searchInputEl.blur();
+      setFocus(searchWrapEl);
+      return;
+    }
+    if (inputHasFocus) return;
+    // ESC/Back generici: chiudi dettaglio
     if (activeView === 'details'){
       e.preventDefault();
       closeDetails();
@@ -550,19 +580,30 @@ document.addEventListener('keydown', (e) => {
     return;
   }
 
-  // FRECCE
+  /* ── FRECCE ── */
   if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(key)){
-    // Se sei nella search, lascia muovere il cursore
-    if (isTyping){
+    // Dentro l'input: lascia muovere il cursore, tranne Down che porta ai risultati
+    if (inputHasFocus){
       if (key === 'ArrowDown'){
         e.preventDefault();
-        input.blur();
+        searchInputEl.blur();
         const first = document.querySelector('#grid .card');
         if (first) setFocus(first);
         return;
       }
       return;
     }
+    // Sul wrapper: Down porta ai risultati, le altre non fanno nulla
+    if (wrapperHasFocus){
+      if (key === 'ArrowDown'){
+        e.preventDefault();
+        const first = document.querySelector('#grid .card');
+        if (first) setFocus(first);
+        return;
+      }
+      return;
+    }
+    // Navigazione normale
     e.preventDefault();
     if (key === 'ArrowLeft')  moveFocus('LEFT');
     if (key === 'ArrowRight') moveFocus('RIGHT');
@@ -572,7 +613,7 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-/* ═══════════════════ SEARCH ═══════════════════ */
+/* ═══════════════════ SEARCH INPUT ═══════════════════ */
 document.getElementById('search').addEventListener('input', () => applyFilter());
 
 /* ═══════════════════ BOOT ═══════════════════ */
@@ -586,7 +627,6 @@ function boot(){
   buildFilters();
   applyFilter();
 
-  // Focus iniziale sulla prima card
   setTimeout(() => {
     const first = document.querySelector('#grid .card');
     if (first) setFocus(first);
