@@ -2,7 +2,7 @@
 """
 M3U Generator – DLHD → Gist
 --------------------------------------------------
-Scarica il palinsesto da dlhd.st, filtra gli eventi di oggi,
+Scarica il palinsesto da dlive.sx, filtra gli eventi di oggi,
 genera un file M3U e lo carica su un Gist di GitHub.
 
 Le credenziali vanno fornite tramite variabili d'ambiente:
@@ -50,7 +50,7 @@ else:
 		"WSOP 2026 ♠️🃏"
     ]
 
-BASE_URL = "https://dlhd.st/"
+BASE_URL = "https://dlive.sx/"
 PROXY_URL = "https://proxy.alemagno1994alex.workers.dev/?url="
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 
@@ -169,9 +169,9 @@ def generate_m3u(html):
                     if href.startswith(("http://", "https://")):
                         url = href
                     elif href.startswith("/"):
-                        url = "https://dlhd.st" + href
+                        url = "https://dlive.sx" + href
                     else:
-                        url = "https://dlhd.st/" + href
+                        url = "https://dlive.sx/" + href
                     channel_name = a.get("title") or a.get_text(strip=True) or "Stream"
                     streams.append({"url": url, "channel_name": channel_name})
 
