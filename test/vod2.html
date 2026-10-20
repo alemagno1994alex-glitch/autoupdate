@@ -82,7 +82,6 @@ main { position: relative; z-index: 3; padding-bottom: 100px; min-height: 40vh; 
 .card:hover .card-poster img { transform: scale(1.04); }
 .card-badge-rating { position: absolute; top: 8px; left: 8px; padding: 3px 7px; border-radius: 6px; background: rgba(0,0,0,0.82); font-size: 0.68rem; font-weight: 800; color: var(--jf-accent); border: 1px solid rgba(0,164,220,0.3); }
 .card-type-badge { position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; border-radius: 6px; background: rgba(0,0,0,0.82); display: grid; place-items: center; font-size: 0.72rem; color: var(--jf-accent); border: 1px solid rgba(0,164,220,0.3); }
-.card-type-badge { position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; border-radius: 6px; background: rgba(0,0,0,0.72); backdrop-filter: blur(6px); display: grid; place-items: center; font-size: 0.72rem; color: var(--jf-accent); border: 1px solid rgba(0,164,220,0.3); }
 .card-caption { padding: 10px 10px 12px; }
 .card-caption h3 { font-size: 0.82rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card-caption p { font-size: 0.72rem; color: var(--text-muted); margin-top: 3px; }
@@ -775,42 +774,39 @@ function renderHome(opts = {}){
     rowDefs.push({ title: '🕒 Visti di recente', items: recents.slice(), type: 'recent' });
   }
 
+  // ▼▼▼ NUOVE USCITE (esclude anni futuri) ▼▼▼
+  const NEW_LIMIT = 20;
+  const CURRENT_YEAR = new Date().getFullYear();
+
+  const newSeries = [...tvShows]
+    .filter(x => {
+      const y = Number(x.year);
+      return y > 0 && y <= CURRENT_YEAR;
+    })
+    .sort((a, b) => Number(b.year) - Number(a.year))
+    .slice(0, NEW_LIMIT);
+
+  if (newSeries.length >= 3) {
+    rowDefs.push({ title: '🆕 Nuove uscite Serie TV', items: newSeries, type: 'new' });
+  }
+
+  const newMovies = [...movies]
+    .filter(x => {
+      const y = Number(x.year);
+      return y > 0 && y <= CURRENT_YEAR;
+    })
+    .sort((a, b) => Number(b.year) - Number(a.year))
+    .slice(0, NEW_LIMIT);
+
+  if (newMovies.length >= 3) {
+    rowDefs.push({ title: '🆕 Nuove uscite Film', items: newMovies, type: 'new' });
+  }
+  // ▲▲▲ FINE NUOVE USCITE ▲▲▲
+
   if (movies.length > 0) rowDefs.push({ title: '🎬 Film', items: movies });
   if (tvShows.length > 0) rowDefs.push({ title: '📺 Serie TV', items: tvShows });
 
-  const genreMap = {};
-  CATALOG.forEach(it => {
-    (it.genres || []).forEach(g => {
-      if (!genreMap[g]) genreMap[g] = { movies: [], tv: [] };
-      if (it.type === 'movie') genreMap[g].movies.push(it);
-      else genreMap[g].tv.push(it);
-    });
-  });
-
-  const genreEntries = Object.entries(genreMap)
-    .filter(([g, m]) => m.movies.length + m.tv.length >= 3)
-    .map(([g, m]) => {
-      const both = (m.movies.length > 0 && m.tv.length > 0) ? 1000 : 0;
-      return { genre: g, ...m, score: both + m.movies.length + m.tv.length };
-    })
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 6);
-
-  const PER_TYPE_LIMIT = 10;
-
-  genreEntries.forEach(({ genre, movies, tv }) => {
-    const chosenMovies = movies.slice(0, PER_TYPE_LIMIT);
-    const chosenTv = tv.slice(0, PER_TYPE_LIMIT);
-    const mixed = [];
-    const maxLen = Math.max(chosenMovies.length, chosenTv.length);
-    for (let i = 0; i < maxLen; i++) {
-      if (chosenMovies[i]) mixed.push(chosenMovies[i]);
-      if (chosenTv[i]) mixed.push(chosenTv[i]);
-    }
-    if (mixed.length >= 3) {
-      rowDefs.push({ title: `🎭 ${genre}`, items: mixed, type: 'genre' });
-    }
-  });
+  
 
   /* 1. Push dei dati (leggero) */
   rowDefs.forEach((def) => {
