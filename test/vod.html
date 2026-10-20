@@ -61,14 +61,21 @@ header { position: fixed; top: 0; left: 0; right: 0; z-index: 100; height: var(-
 .btn-ghost.is-fav.focused { background: rgba(224,76,76,0.3); box-shadow: 0 0 0 3px rgba(224,76,76,0.4), 0 0 24px rgba(224,76,76,0.3); }
 
 main { position: relative; z-index: 3; padding-bottom: 100px; min-height: 40vh; }
-.row-section { margin-bottom: 40px; }
+
+/* ▼ OTTIMIZZAZIONE: content-visibility per righe fuori viewport */
+.row-section {
+  margin-bottom: 40px;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 380px;
+}
+
 .row-header { display: flex; align-items: baseline; justify-content: space-between; padding: 0 48px; margin-bottom: 14px; }
 .row-title { font-family: var(--font-display); font-size: 1.35rem; font-weight: 700; }
 .row-scroll { display: flex; gap: 14px; overflow-x: auto; padding: 6px 48px 18px; scroll-behavior: smooth; scrollbar-width: none; }
 .row-scroll::-webkit-scrollbar { display: none; }
 
 .card { flex: 0 0 auto; width: 184px; overflow: hidden; background: var(--surface-1); position: relative; cursor: pointer; transition: transform 0.22s cubic-bezier(.2,.8,.3,1), box-shadow 0.22s; outline: 2px solid transparent; outline-offset: 2px; }
-.card:hover { box-shadow: var(--card-shadow); z-index: 4; }
+.card:hover {box-shadow: var(--card-shadow); z-index: 4; }
 .card.focused { box-shadow: var(--focus-ring), var(--card-shadow); z-index: 6; outline-color: var(--jf-accent); }
 .card-poster { position: relative; width: 100%; aspect-ratio: 2/3; background: var(--surface-2); overflow: hidden; }
 .card-poster img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.4s ease; }
@@ -79,7 +86,6 @@ main { position: relative; z-index: 3; padding-bottom: 100px; min-height: 40vh; 
 .card-caption h3 { font-size: 0.82rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card-caption p { font-size: 0.72rem; color: var(--text-muted); margin-top: 3px; }
 
-/* ✕ rimozione rapida (mouse/touch) */
 .card-remove-btn {
   position: absolute; bottom: 8px; right: 8px;
   width: 26px; height: 26px; border-radius: 50%;
@@ -99,7 +105,6 @@ main { position: relative; z-index: 3; padding-bottom: 100px; min-height: 40vh; 
   outline: none;
 }
 
-/* Hint "Tieni premuto" per telecomando (visibile solo su card focusata) */
 .card-remove-hint {
   position: absolute; bottom: 8px; left: 8px;
   padding: 4px 8px; border-radius: 6px;
@@ -113,7 +118,6 @@ main { position: relative; z-index: 3; padding-bottom: 100px; min-height: 40vh; 
 .card.focused .card-remove-hint { opacity: 1; }
 .card.holding .card-remove-hint { opacity: 0; }
 
-/* Barra di progresso durante il long-press OK */
 .card-poster::before {
   content: ''; position: absolute; bottom: 0; left: 0; right: 0;
   height: 4px;
@@ -192,6 +196,7 @@ main { position: relative; z-index: 3; padding-bottom: 100px; min-height: 40vh; 
   .row-header { padding: 0 20px; }
   .row-scroll { padding: 6px 20px 16px; gap: 12px; }
   .card { width: 150px; }
+  .row-section { contain-intrinsic-size: auto 320px; }
   #detail-body { padding: 0 22px 28px; }
   #detail-backdrop { height: 260px; }
   #detail-title { font-size: 1.55rem; }
@@ -286,8 +291,16 @@ function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({
   '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function openExternal(url){ window.open(url,'_blank','noopener,noreferrer'); }
 
+/* ▼ OTTIMIZZAZIONE: poster ridimensionati alla dimensione reale della card */
+function resizePoster(url, size = 'w342') {
+  if (!url) return NO_POSTER;
+  if (url.startsWith('data:')) return url;
+  return url.replace(/\/t\/p\/[^/]+\//, `/t/p/${size}/`);
+}
+
 /* ═══════════ CATALOG ═══════════ */
 let CATALOG = [];
+let HERO_POOL = [];   /* ▼ OTTIMIZZAZIONE: precomputato una volta sola */
 
 async function loadCatalog(){
   if (window.CATALOG_DATA && window.CATALOG_DATA.items){
@@ -332,12 +345,12 @@ const searchInputEl = document.getElementById('search');
 
 /* ═══════════ LONG-PRESS OK (telecomando) ═══════════ */
 const HOLD_MS = 800;
-let enterIsHeld = false;          // OK attualmente premuto
-let enterWasLongPress = false;    // il press corrente è già stato gestito come long-press
+let enterIsHeld = false;
+let enterWasLongPress = false;
 let enterHoldTimer = null;
-let enterHoldItem = null;         // snapshot dell'item al momento del keydown
-let enterHoldRowType = null;      // 'fav' o 'recent'
-let enterHoldCardEl = null;       // riferimento DOM alla card
+let enterHoldItem = null;
+let enterHoldRowType = null;
+let enterHoldCardEl = null;
 
 function startEnterHold(item, rowType, cardEl){
   enterIsHeld = true;
@@ -574,7 +587,8 @@ function createCard(item, rowIndex, colIndex, options = {}){
   const poster = document.createElement('div');
   poster.className = 'card-poster';
   const img = document.createElement('img');
-  img.src = item.poster || NO_POSTER;
+  img.src = resizePoster(item.poster, 'w342');   /* ▼ OTTIMIZZAZIONE */
+  img.decoding = 'async';                        /* ▼ OTTIMIZZAZIONE */
   img.alt = item.title || '';
   img.loading = 'lazy';
   img.onerror = () => { img.src = NO_POSTER; };
@@ -592,14 +606,12 @@ function createCard(item, rowIndex, colIndex, options = {}){
   poster.appendChild(typeBadge);
 
   if (options.showRemove){
-    /* Hint per telecomando: "Tieni premuto" */
     const hint = document.createElement('div');
     hint.className = 'card-remove-hint';
     hint.textContent = 'Tieni premuto OK';
     hint.title = 'Tieni premuto OK per rimuovere';
     poster.appendChild(hint);
 
-    /* ✕ per mouse/touch */
     const rm = document.createElement('button');
     rm.type = 'button';
     rm.className = 'card-remove-btn';
@@ -633,12 +645,13 @@ function createCard(item, rowIndex, colIndex, options = {}){
   return card;
 }
 
-/* ═══════════ ROW ═══════════ */
+/* ═══════════ ROW — usato solo da search (riga singola, sempre materializzata) ═══════════ */
 function renderRow(rowConfig, index){
   const { title, items, type } = rowConfig;
   const section = document.createElement('section');
   section.className = 'row-section';
   section.dataset.rowIndex = index;
+  section.dataset.rendered = '1';
   const header = document.createElement('div');
   header.className = 'row-header';
   header.innerHTML = `<h2 class="row-title">${esc(title)}</h2>`;
@@ -652,14 +665,74 @@ function renderRow(rowConfig, index){
   if (!items || items.length === 0){
     row.innerHTML = '<p style="color:var(--text-muted);padding:16px 0;font-size:0.9rem;">Nessun contenuto.</p>';
   } else {
-    items.forEach((it, i) => row.appendChild(createCard(it, index, i, {
+    const frag = document.createDocumentFragment();
+    items.forEach((it, i) => frag.appendChild(createCard(it, index, i, {
       showRemove: isDynamic,
       removeLabel: type === 'fav' ? 'Rimuovi dai preferiti' : 'Rimuovi dai recenti',
       onRemove: type === 'fav' ? removeFavorite : removeFromRecent
     })));
+    row.appendChild(frag);
   }
   section.appendChild(row);
   return section;
+}
+
+/* ═══════════ ▼▼▼ LAZY ROW MATERIALIZATION ▼▼▼ ═══════════ */
+const rowObserver = new IntersectionObserver((entries) => {
+  for (const entry of entries) {
+    if (!entry.isIntersecting) continue;
+    const section = entry.target;
+    const idx = parseInt(section.dataset.rowIndex, 10);
+    materializeRow(idx, section);
+    rowObserver.unobserve(section);
+  }
+}, { rootMargin: '600px 0px 600px 0px', threshold: 0 });
+
+function buildRowShell(def, index){
+  const section = document.createElement('section');
+  section.className = 'row-section';
+  section.dataset.rowIndex = index;
+  section.dataset.rendered = '0';
+  const header = document.createElement('div');
+  header.className = 'row-header';
+  const title = document.createElement('h2');
+  title.className = 'row-title';
+  title.textContent = def.title;
+  header.appendChild(title);
+  section.appendChild(header);
+  const row = document.createElement('div');
+  row.className = 'row-scroll';
+  row.dataset.rowIndex = index;
+  section.appendChild(row);
+  return section;
+}
+
+function materializeRow(index, section){
+  if (!section){
+    section = document.querySelector(`.row-section[data-row-index="${index}"]`);
+  }
+  if (!section || section.dataset.rendered === '1') return;
+  section.dataset.rendered = '1';
+
+  const def = rows[index];
+  const rowEl = section.querySelector('.row-scroll');
+  if (!rowEl) return;
+
+  if (!def || !def.items || def.items.length === 0){
+    rowEl.innerHTML = '<p style="color:var(--text-muted);padding:16px 0;font-size:0.9rem;">Nessun contenuto.</p>';
+    return;
+  }
+
+  const isDynamic = (def.type === 'fav' || def.type === 'recent');
+  const frag = document.createDocumentFragment();
+  def.items.forEach((it, i) => {
+    frag.appendChild(createCard(it, index, i, {
+      showRemove: isDynamic,
+      removeLabel: def.type === 'fav' ? 'Rimuovi dai preferiti' : 'Rimuovi dai recenti',
+      onRemove: def.type === 'fav' ? removeFavorite : removeFromRecent
+    }));
+  });
+  rowEl.appendChild(frag);
 }
 
 /* ═══════════ HOME ═══════════ */
@@ -736,13 +809,29 @@ function renderHome(opts = {}){
     }
   });
 
-  rowDefs.forEach((def, idx) => {
+  /* 1. Push dei dati (leggero) */
+  rowDefs.forEach((def) => {
     rows.push({ title: def.title, items: def.items, type: def.type });
-    app.appendChild(renderRow(rows[idx], idx));
   });
 
-  const heroCandidates = CATALOG.filter(x => x.backdrop);
-  const heroCandidate = pickDailyHero(heroCandidates) || heroCandidates[0];
+  /* 2. Shell DOM (senza card) + observer */
+  rowDefs.forEach((_, idx) => {
+    const section = buildRowShell(rows[idx], idx);
+    app.appendChild(section);
+    rowObserver.observe(section);
+  });
+
+  /* 3. Materializza subito le prime 2 righe (sopra la piega) */
+  for (let i = 0; i < Math.min(2, rows.length); i++){
+    const sec = app.querySelector(`.row-section[data-row-index="${i}"]`);
+    if (sec) materializeRow(i, sec);
+  }
+
+  /* ▼ OTTIMIZZAZIONE: pool hero precomputato */
+  if (HERO_POOL.length === 0){
+    HERO_POOL = CATALOG.filter(x => x.backdrop);
+  }
+  const heroCandidate = pickDailyHero(HERO_POOL) || HERO_POOL[0];
   if (heroCandidate){
     heroItem = heroCandidate;
     renderHero(heroCandidate);
@@ -796,6 +885,11 @@ function setFocus(rowIndex, colIndex){
   const row = rows[rowIndex];
   const maxCol = row.items.length - 1;
   if (maxCol < 0) return;
+
+  /* ▼ OTTIMIZZAZIONE: materializza on-demand la riga target */
+  const section = document.querySelector(`.row-section[data-row-index="${rowIndex}"]`);
+  if (section && section.dataset.rendered !== '1') materializeRow(rowIndex, section);
+
   focusedRow = rowIndex;
   focusedCol = Math.max(0, Math.min(colIndex, maxCol));
   document.querySelectorAll('.card.focused').forEach(c => c.classList.remove('focused'));
@@ -847,6 +941,8 @@ function moveFocus(direction){
     const row = rows[focusedRow];
     if (focusedCol < row.items.length - 1) setFocus(focusedRow, focusedCol + 1);
   } else if (direction === 'enter'){
+    const section = document.querySelector(`.row-section[data-row-index="${focusedRow}"]`);
+    if (section && section.dataset.rendered !== '1') materializeRow(focusedRow, section);
     const card = document.querySelector(`.card[data-row="${focusedRow}"][data-col="${focusedCol}"]`);
     if (card) card.click();
   }
@@ -870,7 +966,7 @@ async function openDetail(item){
   document.getElementById('detail-backdrop').style.display = 'none';
   document.getElementById('detail-title').textContent = item.title || 'Caricamento...';
   document.getElementById('detail-meta').innerHTML = '';
-  document.getElementById('detail-overview').textContent = item.overview || '';
+  document.getElementById('detail-overview').textContent = item.overview || 'Caricamento descrizione…';
   document.getElementById('detail-actions').innerHTML = '';
   document.getElementById('detail-trailer').innerHTML = '';
   document.getElementById('detail-cast').innerHTML = '';
@@ -910,7 +1006,8 @@ function renderDetailBase(item){
     <span>${esc(item.year || '')}</span>
     <span>${tv ? 'Serie TV' : 'Film'}</span>
     ${(item.genres || []).map(g => `<span>${esc(g)}</span>`).join('')}`;
-  document.getElementById('detail-overview').textContent = item.overview || 'Nessuna descrizione.';
+  /* ▼ se overview manca (catalog slim), placeholder — enrichDetail la riempie */
+  document.getElementById('detail-overview').textContent = item.overview || 'Caricamento descrizione…';
 
   const backdrop = document.getElementById('detail-backdrop');
   if (item.backdrop){ backdrop.src = item.backdrop; backdrop.style.display = 'block'; }
@@ -964,6 +1061,11 @@ function updateDetailActions(item){
 
 function enrichDetail(data, type){
   const tv = type === 'tv';
+
+  /* ▼ OTTIMIZZAZIONE: overview completa da TMDB (catalog slim) */
+  if (data && data.overview && data.overview.trim()){
+    document.getElementById('detail-overview').textContent = data.overview;
+  }
 
   const cast = (data.credits?.cast || []).slice(0, 12);
   const castEl = document.getElementById('detail-cast');
@@ -1182,13 +1284,11 @@ document.addEventListener('keydown', (e) => {
   const key = e.key;
   const inputHasFocus = document.activeElement === searchInputEl;
 
-  /* Blocca i repeat mentre Enter/OK è tenuto premuto */
   if (key === 'Enter' && enterIsHeld){
     e.preventDefault();
     return;
   }
 
-  /* ▼ Gestione speciale Enter/OK su card Preferiti/Recenti: long-press = rimuovi ▼ */
   if (key === 'Enter'){
     const onDynamic = !isDetailOpen
       && heroFocusIndex < 0
@@ -1235,7 +1335,6 @@ document.addEventListener('keydown', (e) => {
     return;
   }
 
-  /* Frecce bloccate durante l'hold: l'utente sta rimuovendo */
   if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(key)){
     if (enterIsHeld) { e.preventDefault(); return; }
     if (inputHasFocus){
@@ -1259,7 +1358,6 @@ document.addEventListener('keydown', (e) => {
     return;
   }
 
-  /* Scorciatoia PC: Canc rimuove la card focusata da Preferiti/Recenti */
   if (key === 'Delete' || key === 'Del'){
     if (inputHasFocus) return;
     if (isDetailOpen) return;
@@ -1287,7 +1385,6 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-/* ▼ Keyup Enter/OK: esegue tap breve, oppure ignora se long-press già gestito ▼ */
 document.addEventListener('keyup', (e) => {
   if (e.key !== 'Enter') return;
   if (!enterIsHeld) return;
@@ -1304,12 +1401,10 @@ document.addEventListener('keyup', (e) => {
 
   if (wasLong) return;
 
-  /* Tap breve: apri dettaglio sulla card snapshot */
   if (cardEl && document.contains(cardEl)) {
     lastFocusedCard = cardEl;
     cardEl.click();
   } else {
-    /* Fallback: usa posizione corrente */
     const card = document.querySelector(`.card[data-row="${focusedRow}"][data-col="${focusedCol}"]`);
     if (card) { lastFocusedCard = card; card.click(); }
   }
