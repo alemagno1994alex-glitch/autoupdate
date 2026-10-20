@@ -341,87 +341,90 @@ function idbSet(key, value){
 }
 
 /* --- Cache API --- */
+/* --- Cache API (salva anche 'generated') --- */
 async function getCatalogFromCache(){
   try {
     const rec = await idbGet('items');
     if (!rec || !rec.items || !rec.ts) return null;
-    const age = Date.now() - rec.ts;
-    if (age > CAT_TTL) return null;               // scaduto
-    return rec.items;
-  } catch(e){
-    return null;
-  }
+    const expired = (Date.now() - rec.ts) > CAT_TTL;
+    return { items: rec.items, generated: rec.generated || null, expired };
+  } catch(e){ return null; }
 }
-async function saveCatalogToCache(items){
+async function saveCatalogToCache(items, generated){
   try {
-    await idbSet('items', { ts: Date.now(), items });
+    await idbSet('items', { ts: Date.now(), items, generated: generated || null });
   } catch(e){
     console.warn('[catalog] cache non salvata:', e.message);
   }
 }
 
-/* --- Caricamento --- */
+/* --- Caricamento: vince il 'generated' più recente --- */
 async function loadCatalog(){
-  // 1) cache IndexedDB valida (< 24h) → istantaneo, zero rete
-  const cached = await getCatalogFromCache();
-  if (cached){
-    CATALOG = cached;
-    console.log('[catalog] da IndexedDB:', CATALOG.length, 'titoli');
-    // Revalida in background SOLO se il browser ha rete
+  const disk      = window.CATALOG_DATA;
+  const diskItems = disk && Array.isArray(disk.items) ? disk.items : null;
+  const diskGen   = disk && disk.generated ? disk.generated : null;
+
+  const cached       = await getCatalogFromCache();
+  const cachedItems  = cached ? cached.items : null;
+  const cachedGen    = cached ? cached.generated : null;
+  const cacheExpired = cached ? cached.expired : true;
+
+  if (diskItems && diskGen){
+    if (!cachedGen || cacheExpired || diskGen >= cachedGen){
+      CATALOG = diskItems;
+      await saveCatalogToCache(CATALOG, diskGen);
+      console.log('[catalog] da catalog.js:', CATALOG.length, '·', diskGen);
+      return;
+    }
+    CATALOG = cachedItems;
+    console.log('[catalog] da cache:', CATALOG.length, '·', cachedGen);
     if (navigator.onLine) refreshCatalogInBackground();
     return;
   }
 
-  // 2) window.CATALOG_DATA (script CDN)
-  if (window.CATALOG_DATA && window.CATALOG_DATA.items){
-    CATALOG = window.CATALOG_DATA.items;
-    console.log('[catalog] da catalog.js:', CATALOG.length, 'titoli');
-    await saveCatalogToCache(CATALOG);
+  if (cachedItems && !cacheExpired){
+    CATALOG = cachedItems;
+    console.log('[catalog] da cache (no catalog.js):', CATALOG.length);
     return;
   }
 
-  // 3) fallback fetch (utile in dev)
   try {
     const res = await fetch('catalog.json', { cache: 'no-store' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     CATALOG = data.items || [];
-    console.log('[catalog] da catalog.json:', CATALOG.length, 'titoli');
-    await saveCatalogToCache(CATALOG);
+    await saveCatalogToCache(CATALOG, data.generated);
+    console.log('[catalog] da catalog.json:', CATALOG.length);
   } catch(e){
     console.error('Errore caricamento catalogo:', e.message);
     CATALOG = [];
   }
 }
 
-/* --- Revalidate in background (opzionale ma consigliato) --- */
+/* --- Revalidate in background (stessa cartella = path relativo OK) --- */
 let _refreshInFlight = false;
 function refreshCatalogInBackground(){
   if (_refreshInFlight) return;
   _refreshInFlight = true;
-
-  // Ricarica catalog.js con cache-bust, poi confronta
   const s = document.createElement('script');
-  s.src = 'https://raw.githack.com/alemagno1994alex-glitch/5bf6d96613ccc8f45cc082f9ec213b1e/raw/catalog.js?ts=' + Date.now();
+  s.src = 'catalog.js?ts=' + Date.now();   // ✅ relativo, stessa cartella
   s.async = true;
   s.onload = async () => {
     _refreshInFlight = false;
-    if (window.CATALOG_DATA && window.CATALOG_DATA.items){
-      const newItems = window.CATALOG_DATA.items;
-      if (newItems.length !== CATALOG.length){
-        // numero titoli cambiato → quasi certamente nuovo catalogo
-        CATALOG = newItems;
-        await saveCatalogToCache(CATALOG);
-        console.log('[catalog] aggiornato in background:', CATALOG.length, 'titoli');
-        // ridisegna la home se sei ancora lì
-        if (currentView === 'home' && !isDetailOpen) renderHome({ skipHeroFocus: true });
-      }
+    const data = window.CATALOG_DATA;
+    if (!data || !Array.isArray(data.items) || !data.generated) return;
+    const rec = await idbGet('items').catch(() => null);
+    const oldGen = rec && rec.generated ? rec.generated : null;
+    if (!oldGen || data.generated > oldGen){
+      CATALOG = data.items;
+      await saveCatalogToCache(CATALOG, data.generated);
+      console.log('[catalog] aggiornato in background:', CATALOG.length, '·', data.generated);
+      if (currentView === 'home' && !isDetailOpen) renderHome({ skipHeroFocus: true });
     }
   };
   s.onerror = () => { _refreshInFlight = false; };
   document.head.appendChild(s);
 }
-
 function getScUrl(item){
   if (item.sc_id) return `${SC_BASE}/it/watch/${item.sc_id}`;
   return `${SC_BASE}/it/search?q=${encodeURIComponent(item.title || '')}`;
