@@ -56,8 +56,6 @@ header { position: fixed; top: 0; left: 0; right: 0; z-index: 100; height: var(-
 .btn-primary:hover, .btn-primary.focused { background: #33b7e6; box-shadow: 0 6px 28px rgba(0,164,220,0.55), var(--focus-ring); }
 .btn-ghost { background: rgba(255,255,255,0.08); color: var(--text-primary); border: 1px solid rgba(255,255,255,0.14); backdrop-filter: blur(8px); }
 .btn-ghost:hover, .btn-ghost.focused { background: rgba(255,255,255,0.18); box-shadow: var(--focus-ring); }
-
-/* ▼▼▼ NUOVO: stile bottone preferito attivo ▼▼▼ */
 .btn-ghost.is-fav { background: rgba(224,76,76,0.18); border-color: rgba(224,76,76,0.5); color: #ff8888; }
 .btn-ghost.is-fav:hover,
 .btn-ghost.is-fav.focused { background: rgba(224,76,76,0.3); box-shadow: 0 0 0 3px rgba(224,76,76,0.4), 0 0 24px rgba(224,76,76,0.3); }
@@ -69,9 +67,9 @@ main { position: relative; z-index: 3; padding-bottom: 100px; min-height: 40vh; 
 .row-scroll { display: flex; gap: 14px; overflow-x: auto; padding: 6px 48px 18px; scroll-behavior: smooth; scrollbar-width: none; }
 .row-scroll::-webkit-scrollbar { display: none; }
 
-.card { flex: 0 0 auto; width: 184px; border-radius: var(--radius); overflow: hidden; background: var(--surface-1); position: relative; cursor: pointer; transition: transform 0.22s cubic-bezier(.2,.8,.3,1), box-shadow 0.22s; outline: 2px solid transparent; outline-offset: 2px; }
-.card:hover { transform: scale(1.04) translateY(-4px); box-shadow: var(--card-shadow); z-index: 4; }
-.card.focused { transform: scale(1.08) translateY(-6px); box-shadow: var(--focus-ring), var(--card-shadow); z-index: 6; outline-color: var(--jf-accent); }
+.card { flex: 0 0 auto; width: 184px; overflow: hidden; background: var(--surface-1); position: relative; cursor: pointer; transition: transform 0.22s cubic-bezier(.2,.8,.3,1), box-shadow 0.22s; outline: 2px solid transparent; outline-offset: 2px; }
+.card:hover { box-shadow: var(--card-shadow); z-index: 4; }
+.card.focused { box-shadow: var(--focus-ring), var(--card-shadow); z-index: 6; outline-color: var(--jf-accent); }
 .card-poster { position: relative; width: 100%; aspect-ratio: 2/3; background: var(--surface-2); overflow: hidden; }
 .card-poster img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.4s ease; }
 .card:hover .card-poster img { transform: scale(1.04); }
@@ -81,7 +79,7 @@ main { position: relative; z-index: 3; padding-bottom: 100px; min-height: 40vh; 
 .card-caption h3 { font-size: 0.82rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card-caption p { font-size: 0.72rem; color: var(--text-muted); margin-top: 3px; }
 
-/* ▼▼▼ NUOVO: badge ✕ per rimozione rapida sulle card Preferiti/Recenti ▼▼▼ */
+/* ✕ rimozione rapida (mouse/touch) */
 .card-remove-btn {
   position: absolute; bottom: 8px; right: 8px;
   width: 26px; height: 26px; border-radius: 50%;
@@ -99,6 +97,37 @@ main { position: relative; z-index: 3; padding-bottom: 100px; min-height: 40vh; 
   background: #e04c4c; border-color: #e04c4c;
   box-shadow: 0 0 14px rgba(224,76,76,0.65);
   outline: none;
+}
+
+/* Hint "Tieni premuto" per telecomando (visibile solo su card focusata) */
+.card-remove-hint {
+  position: absolute; bottom: 8px; left: 8px;
+  padding: 4px 8px; border-radius: 6px;
+  background: rgba(0,0,0,0.85); backdrop-filter: blur(6px);
+  border: 1px solid rgba(224,76,76,0.5);
+  font-size: 0.56rem; font-weight: 700; color: #ff8888;
+  letter-spacing: 0.2px; white-space: nowrap;
+  opacity: 0; transition: opacity 0.2s;
+  pointer-events: none; z-index: 7;
+}
+.card.focused .card-remove-hint { opacity: 1; }
+.card.holding .card-remove-hint { opacity: 0; }
+
+/* Barra di progresso durante il long-press OK */
+.card-poster::before {
+  content: ''; position: absolute; bottom: 0; left: 0; right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #e04c4c, #ff6666);
+  transform: scaleX(0); transform-origin: left;
+  z-index: 5; pointer-events: none;
+  border-radius: 0 0 4px 4px;
+}
+.card.holding .card-poster::before {
+  animation: holdFill 800ms linear forwards;
+}
+@keyframes holdFill {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
 }
 
 #detail-overlay { position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,0.78); backdrop-filter: blur(10px); display: none; align-items: flex-start; justify-content: center; padding: 32px 20px 60px; overflow-y: auto; opacity: 0; transition: opacity 0.3s; }
@@ -188,7 +217,7 @@ main { position: relative; z-index: 3; padding-bottom: 100px; min-height: 40vh; 
 <header>
   <div class="logo">
     <div class="logo-mark">▶</div>
-    <span class="logo-text">StreamUI</span>
+    <span class="logo-text">NeroCommunity</span>
   </div>
   <div class="header-search" id="search-wrap" tabindex="0" onclick="onSearchWrapClick(event)">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -301,14 +330,53 @@ let heroFocusIndex = -1;
 const searchWrapEl = document.getElementById('search-wrap');
 const searchInputEl = document.getElementById('search');
 
-/* ═══════════ ▼▼▼ NUOVO: PREFERITI & RECENTI ▼▼▼ ═══════════ */
+/* ═══════════ LONG-PRESS OK (telecomando) ═══════════ */
+const HOLD_MS = 800;
+let enterIsHeld = false;          // OK attualmente premuto
+let enterWasLongPress = false;    // il press corrente è già stato gestito come long-press
+let enterHoldTimer = null;
+let enterHoldItem = null;         // snapshot dell'item al momento del keydown
+let enterHoldRowType = null;      // 'fav' o 'recent'
+let enterHoldCardEl = null;       // riferimento DOM alla card
+
+function startEnterHold(item, rowType, cardEl){
+  enterIsHeld = true;
+  enterWasLongPress = false;
+  enterHoldItem = item;
+  enterHoldRowType = rowType;
+  enterHoldCardEl = cardEl;
+  if (cardEl) cardEl.classList.add('holding');
+  enterHoldTimer = setTimeout(() => {
+    enterWasLongPress = true;
+    enterHoldTimer = null;
+    if (enterHoldCardEl) enterHoldCardEl.classList.remove('holding');
+    const it = enterHoldItem;
+    const t = enterHoldRowType;
+    enterHoldItem = null;
+    enterHoldRowType = null;
+    enterHoldCardEl = null;
+    if (!it) return;
+    if (t === 'fav') removeFavorite(it);
+    else if (t === 'recent') removeFromRecent(it);
+  }, HOLD_MS);
+}
+
+function cancelEnterHold(){
+  if (enterHoldTimer){ clearTimeout(enterHoldTimer); enterHoldTimer = null; }
+  if (enterHoldCardEl) enterHoldCardEl.classList.remove('holding');
+  enterHoldItem = null;
+  enterHoldRowType = null;
+  enterHoldCardEl = null;
+}
+
+/* ═══════════ PREFERITI & RECENTI ═══════════ */
 const FAV_KEY = 'streamui_favorites_v1';
 const RECENT_KEY = 'streamui_recent_v1';
 const RECENT_LIMIT = 20;
 
 let favorites = [];
 let recents = [];
-let homeDirty = false;  // se true, la home va ricostruita al prossimo ritorno
+let homeDirty = false;
 
 function itemKey(item){ return `${item.type}_${item.tmdb_id}`; }
 
@@ -367,6 +435,7 @@ function addToRecent(item){
   if (recents.length > RECENT_LIMIT) recents.length = RECENT_LIMIT;
   saveRecents();
   updateDetailActions(item);
+  refreshHomeAfterChange();
 }
 
 function removeFromRecent(item){
@@ -384,6 +453,8 @@ function refreshHomeAfterChange(){
 }
 
 function rebuildHomePreservingFocus(){
+  const wasHeroFocused = heroFocusIndex >= 0;
+  const prevHeroIndex = heroFocusIndex;
   const prevRow = focusedRow;
   const prevCol = focusedCol;
   const prevItem = rows[prevRow] && rows[prevRow].items ? rows[prevRow].items[prevCol] : null;
@@ -394,16 +465,30 @@ function rebuildHomePreservingFocus(){
 
   window.scrollTo(0, scrollY);
 
-  // Prova a ritrovare lo stesso titolo nella nuova disposizione
+  if (wasHeroFocused){
+    setHeroFocus(prevHeroIndex);
+    return;
+  }
+
   if (prevKey){
     for (let r = 0; r < rows.length; r++){
       const c = rows[r].items.findIndex(it => itemKey(it) === prevKey);
       if (c >= 0){ setFocus(r, c); return; }
     }
   }
-  // Fallback: posizione simile
+
   if (rows.length > 0){
-    const r = Math.min(prevRow, rows.length - 1);
+    let r = Math.min(prevRow, rows.length - 1);
+    while (r >= 0 && (!rows[r].items || rows[r].items.length === 0)) r--;
+    if (r < 0){
+      for (r = 0; r < rows.length; r++){
+        if (rows[r].items && rows[r].items.length > 0) break;
+      }
+    }
+    if (r < 0 || !rows[r].items || rows[r].items.length === 0){
+      setHeroFocus(0);
+      return;
+    }
     const maxCol = rows[r].items.length - 1;
     setFocus(r, Math.min(prevCol, Math.max(0, maxCol)));
   } else {
@@ -506,8 +591,15 @@ function createCard(item, rowIndex, colIndex, options = {}){
   typeBadge.textContent = tv ? '📺' : '🎬';
   poster.appendChild(typeBadge);
 
-  /* ▼▼▼ NUOVO: badge ✕ per Preferiti/Recenti ▼▼▼ */
   if (options.showRemove){
+    /* Hint per telecomando: "Tieni premuto" */
+    const hint = document.createElement('div');
+    hint.className = 'card-remove-hint';
+    hint.textContent = 'Tieni premuto OK';
+    hint.title = 'Tieni premuto OK per rimuovere';
+    poster.appendChild(hint);
+
+    /* ✕ per mouse/touch */
     const rm = document.createElement('button');
     rm.type = 'button';
     rm.className = 'card-remove-btn';
@@ -572,6 +664,7 @@ function renderRow(rowConfig, index){
 
 /* ═══════════ HOME ═══════════ */
 function renderHome(opts = {}){
+  homeDirty = false;
   currentView = 'home';
   heroFocusIndex = -1;
   document.getElementById('hero').style.display = '';
@@ -599,7 +692,6 @@ function renderHome(opts = {}){
   const tvShows = CATALOG.filter(x => x.type === 'tv');
   const rowDefs = [];
 
-  /* ▼▼▼ NUOVO: Preferiti e Recenti in cima ▼▼▼ */
   if (favorites.length > 0){
     rowDefs.push({ title: '❤ I tuoi preferiti', items: favorites.slice(), type: 'fav' });
   }
@@ -687,7 +779,6 @@ function renderHero(item){
   playBtn.parentNode.replaceChild(newPlay, playBtn);
   infoBtn.parentNode.replaceChild(newInfo, infoBtn);
 
-  /* ▼▼▼ NUOVO: Play aggiunge ai recenti ▼▼▼ */
   newPlay.onclick = () => {
     addToRecent(item);
     openExternal(getScUrl(item));
@@ -791,7 +882,6 @@ async function openDetail(item){
   document.body.style.overflow = 'hidden';
   detailModal.scrollTop = 0;
 
-  /* ▼▼▼ NUOVO: apertura dettaglio = vista recente ▼▼▼ */
   addToRecent(item);
 
   renderDetailBase(item);
@@ -825,7 +915,6 @@ function renderDetailBase(item){
   const backdrop = document.getElementById('detail-backdrop');
   if (item.backdrop){ backdrop.src = item.backdrop; backdrop.style.display = 'block'; }
 
-  /* ▼▼▼ NUOVO: pulsanti azione (Play + Preferiti + Rimuovi recenti) ▼▼▼ */
   renderDetailActions(item);
 }
 
@@ -981,7 +1070,6 @@ function closeDetail(){
   document.getElementById('episodes-list').innerHTML = '';
   document.getElementById('season-chips').innerHTML = '';
 
-  /* ▼▼▼ NUOVO: se ci sono state modifiche a Preferiti/Recenti, ricostruisci la home ▼▼▼ */
   if (currentView === 'home' && homeDirty){
     homeDirty = false;
     rebuildHomePreservingFocus();
@@ -1094,6 +1182,31 @@ document.addEventListener('keydown', (e) => {
   const key = e.key;
   const inputHasFocus = document.activeElement === searchInputEl;
 
+  /* Blocca i repeat mentre Enter/OK è tenuto premuto */
+  if (key === 'Enter' && enterIsHeld){
+    e.preventDefault();
+    return;
+  }
+
+  /* ▼ Gestione speciale Enter/OK su card Preferiti/Recenti: long-press = rimuovi ▼ */
+  if (key === 'Enter'){
+    const onDynamic = !isDetailOpen
+      && heroFocusIndex < 0
+      && !searchFocused
+      && !inputHasFocus
+      && rows[focusedRow]
+      && (rows[focusedRow].type === 'fav' || rows[focusedRow].type === 'recent');
+
+    if (onDynamic){
+      e.preventDefault();
+      const item = rows[focusedRow].items[focusedCol];
+      const rowType = rows[focusedRow].type;
+      const cardEl = document.querySelector(`.card[data-row="${focusedRow}"][data-col="${focusedCol}"]`);
+      if (item) startEnterHold(item, rowType, cardEl);
+      return;
+    }
+  }
+
   if (key === 'Enter'){
     if (searchFocused && !inputHasFocus){ e.preventDefault(); activateSearch(); return; }
     if (inputHasFocus){
@@ -1122,18 +1235,9 @@ document.addEventListener('keydown', (e) => {
     return;
   }
 
-  if (key === 'Escape' || key === 'Backspace'){
-    if (inputHasFocus && key === 'Backspace') return;
-    if (inputHasFocus && key === 'Escape'){ e.preventDefault(); searchInputEl.blur(); setSearchFocus(); return; }
-    if (inputHasFocus) return;
-    if (heroFocusIndex >= 0){ e.preventDefault(); setHeroFocus(-1); return; }
-    if (searchFocused){ e.preventDefault(); setHeroFocus(0); return; }
-    if (isDetailOpen){ e.preventDefault(); closeDetail(); return; }
-    if (currentView === 'search'){ e.preventDefault(); searchInputEl.value = ''; renderHome(); return; }
-    return;
-  }
-
+  /* Frecce bloccate durante l'hold: l'utente sta rimuovendo */
   if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(key)){
+    if (enterIsHeld) { e.preventDefault(); return; }
     if (inputHasFocus){
       if (key === 'ArrowDown'){
         e.preventDefault();
@@ -1154,12 +1258,67 @@ document.addEventListener('keydown', (e) => {
     if (key === 'ArrowRight') moveFocus('right');
     return;
   }
+
+  /* Scorciatoia PC: Canc rimuove la card focusata da Preferiti/Recenti */
+  if (key === 'Delete' || key === 'Del'){
+    if (inputHasFocus) return;
+    if (isDetailOpen) return;
+    if (heroFocusIndex >= 0 || searchFocused) return;
+    const row = rows[focusedRow];
+    if (!row) return;
+    if (row.type !== 'fav' && row.type !== 'recent') return;
+    const item = row.items[focusedCol];
+    if (!item) return;
+    e.preventDefault();
+    if (row.type === 'fav') removeFavorite(item);
+    else removeFromRecent(item);
+    return;
+  }
+
+  if (key === 'Escape' || key === 'Backspace'){
+    if (inputHasFocus && key === 'Backspace') return;
+    if (inputHasFocus && key === 'Escape'){ e.preventDefault(); searchInputEl.blur(); setSearchFocus(); return; }
+    if (inputHasFocus) return;
+    if (heroFocusIndex >= 0){ e.preventDefault(); setHeroFocus(-1); return; }
+    if (searchFocused){ e.preventDefault(); setHeroFocus(0); return; }
+    if (isDetailOpen){ e.preventDefault(); closeDetail(); return; }
+    if (currentView === 'search'){ e.preventDefault(); searchInputEl.value = ''; renderHome(); return; }
+    return;
+  }
+});
+
+/* ▼ Keyup Enter/OK: esegue tap breve, oppure ignora se long-press già gestito ▼ */
+document.addEventListener('keyup', (e) => {
+  if (e.key !== 'Enter') return;
+  if (!enterIsHeld) return;
+
+  const wasLong = enterWasLongPress;
+  const cardEl = enterHoldCardEl;
+  const hadTimer = !!enterHoldTimer;
+
+  enterIsHeld = false;
+  enterWasLongPress = false;
+
+  if (hadTimer) cancelEnterHold();
+  else { enterHoldItem = null; enterHoldRowType = null; enterHoldCardEl = null; }
+
+  if (wasLong) return;
+
+  /* Tap breve: apri dettaglio sulla card snapshot */
+  if (cardEl && document.contains(cardEl)) {
+    lastFocusedCard = cardEl;
+    cardEl.click();
+  } else {
+    /* Fallback: usa posizione corrente */
+    const card = document.querySelector(`.card[data-row="${focusedRow}"][data-col="${focusedCol}"]`);
+    if (card) { lastFocusedCard = card; card.click(); }
+  }
 });
 
 /* ═══════════ BOOT ═══════════ */
 (async function boot(){
   await loadCatalog();
-  loadUserData();      /* ▼ NUOVO: carica preferiti/recenti ▼ */
+  loadUserData();
   renderHome();
 })();
 </script>
