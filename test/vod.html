@@ -763,8 +763,9 @@ function renderHome(opts = {}){
     return;
   }
 
-  const movies = CATALOG.filter(x => x.type === 'movie');
-  const tvShows = CATALOG.filter(x => x.type === 'tv');
+  const HOME_ROW_LIMIT = 10;
+  const movies = CATALOG.filter(x => x.type === 'movie').slice(0, HOME_ROW_LIMIT);
+  const tvShows = CATALOG.filter(x => x.type === 'tv').slice(0, HOME_ROW_LIMIT);
   const rowDefs = [];
 
   if (favorites.length > 0){
@@ -795,7 +796,7 @@ function renderHome(opts = {}){
     .sort((a, b) => b.score - a.score)
     .slice(0, 6);
 
-  const PER_TYPE_LIMIT = 10;
+  const PER_TYPE_LIMIT = Math.ceil(HOME_ROW_LIMIT / 2); // 5 per tipo → max 10 misti per genere
 
   genreEntries.forEach(({ genre, movies, tv }) => {
     const chosenMovies = movies.slice(0, PER_TYPE_LIMIT);
