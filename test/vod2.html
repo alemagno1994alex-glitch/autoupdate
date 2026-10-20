@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>StreamUI · VOD</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎬</text></svg>" />
+<link rel="preconnect" href="https://image.tmdb.org" crossorigin />
+<link rel="preconnect" href="https://api.themoviedb.org" crossorigin />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Quicksand:wght@700&display=swap" rel="stylesheet" />
@@ -274,7 +276,7 @@ main { position: relative; z-index: 3; padding-bottom: 100px; min-height: 40vh; 
   </div>
 </div>
 
-<script src="https://proxy.alemagno1994alex.workers.dev/?url=https://gist.githubusercontent.com/alemagno1994alex-glitch/5bf6d96613ccc8f45cc082f9ec213b1e/raw/catalog.js"></script>
+<script defer src="https://raw.githack.com/alemagno1994alex-glitch/5bf6d96613ccc8f45cc082f9ec213b1e/raw/catalog.js"></script>
 
 <script>
 /* ═══════════ CONFIG ═══════════ */
@@ -298,26 +300,126 @@ function resizePoster(url, size = 'w342') {
   return url.replace(/\/t\/p\/[^/]+\//, `/t/p/${size}/`);
 }
 
-/* ═══════════ CATALOG ═══════════ */
+/* ═══════════ CATALOG (IndexedDB + TTL 24h) ═══════════ */
 let CATALOG = [];
-let HERO_POOL = [];   /* ▼ OTTIMIZZAZIONE: precomputato una volta sola */
+let HERO_POOL = [];
 
+const CAT_DB_NAME  = 'streamui_db';
+const CAT_DB_STORE = 'catalog';
+const CAT_TTL      = 24 * 60 * 60 * 1000; // 24h
+const CAT_VERSION_KEY = 'catalog_version_v1';
+
+/* --- Mini helper IndexedDB (promise-based, no dipendenze) --- */
+function idbOpen(){
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(CAT_DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(CAT_DB_STORE)) {
+        db.createObjectStore(CAT_DB_STORE);
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror   = () => reject(req.error);
+  });
+}
+function idbGet(key){
+  return idbOpen().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(CAT_DB_STORE, 'readonly');
+    const req = tx.objectStore(CAT_DB_STORE).get(key);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror   = () => reject(req.error);
+  }));
+}
+function idbSet(key, value){
+  return idbOpen().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(CAT_DB_STORE, 'readwrite');
+    tx.objectStore(CAT_DB_STORE).put(value, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror    = () => reject(tx.error);
+  }));
+}
+
+/* --- Cache API --- */
+async function getCatalogFromCache(){
+  try {
+    const rec = await idbGet('items');
+    if (!rec || !rec.items || !rec.ts) return null;
+    const age = Date.now() - rec.ts;
+    if (age > CAT_TTL) return null;               // scaduto
+    return rec.items;
+  } catch(e){
+    return null;
+  }
+}
+async function saveCatalogToCache(items){
+  try {
+    await idbSet('items', { ts: Date.now(), items });
+  } catch(e){
+    console.warn('[catalog] cache non salvata:', e.message);
+  }
+}
+
+/* --- Caricamento --- */
 async function loadCatalog(){
+  // 1) cache IndexedDB valida (< 24h) → istantaneo, zero rete
+  const cached = await getCatalogFromCache();
+  if (cached){
+    CATALOG = cached;
+    console.log('[catalog] da IndexedDB:', CATALOG.length, 'titoli');
+    // Revalida in background SOLO se il browser ha rete
+    if (navigator.onLine) refreshCatalogInBackground();
+    return;
+  }
+
+  // 2) window.CATALOG_DATA (script CDN)
   if (window.CATALOG_DATA && window.CATALOG_DATA.items){
     CATALOG = window.CATALOG_DATA.items;
     console.log('[catalog] da catalog.js:', CATALOG.length, 'titoli');
+    await saveCatalogToCache(CATALOG);
     return;
   }
+
+  // 3) fallback fetch (utile in dev)
   try {
     const res = await fetch('catalog.json', { cache: 'no-store' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     CATALOG = data.items || [];
     console.log('[catalog] da catalog.json:', CATALOG.length, 'titoli');
+    await saveCatalogToCache(CATALOG);
   } catch(e){
     console.error('Errore caricamento catalogo:', e.message);
     CATALOG = [];
   }
+}
+
+/* --- Revalidate in background (opzionale ma consigliato) --- */
+let _refreshInFlight = false;
+function refreshCatalogInBackground(){
+  if (_refreshInFlight) return;
+  _refreshInFlight = true;
+
+  // Ricarica catalog.js con cache-bust, poi confronta
+  const s = document.createElement('script');
+  s.src = 'https://raw.githack.com/alemagno1994alex-glitch/5bf6d96613ccc8f45cc082f9ec213b1e/raw/catalog.js?ts=' + Date.now();
+  s.async = true;
+  s.onload = async () => {
+    _refreshInFlight = false;
+    if (window.CATALOG_DATA && window.CATALOG_DATA.items){
+      const newItems = window.CATALOG_DATA.items;
+      if (newItems.length !== CATALOG.length){
+        // numero titoli cambiato → quasi certamente nuovo catalogo
+        CATALOG = newItems;
+        await saveCatalogToCache(CATALOG);
+        console.log('[catalog] aggiornato in background:', CATALOG.length, 'titoli');
+        // ridisegna la home se sei ancora lì
+        if (currentView === 'home' && !isDetailOpen) renderHome({ skipHeroFocus: true });
+      }
+    }
+  };
+  s.onerror = () => { _refreshInFlight = false; };
+  document.head.appendChild(s);
 }
 
 function getScUrl(item){
@@ -845,9 +947,10 @@ function renderHero(item){
   const backdrop = document.getElementById('hero-backdrop');
   const text = document.getElementById('hero-text');
   if (item.backdrop){
-    backdrop.src = item.backdrop;
+    backdrop.src = resizePoster(item.backdrop, 'w1280');
+    backdrop.fetchPriority = 'high';
     backdrop.classList.remove('hidden');
-  } else {
+} else {
     backdrop.classList.add('hidden');
   }
   text.classList.remove('hidden');
@@ -1009,7 +1112,7 @@ function renderDetailBase(item){
   document.getElementById('detail-overview').textContent = item.overview || 'Caricamento descrizione…';
 
   const backdrop = document.getElementById('detail-backdrop');
-  if (item.backdrop){ backdrop.src = item.backdrop; backdrop.style.display = 'block'; }
+  if (item.backdrop){ backdrop.src = resizePoster(item.backdrop, 'w1280'); backdrop.style.display = 'block'; }
 
   renderDetailActions(item);
 }
@@ -1410,11 +1513,11 @@ document.addEventListener('keyup', (e) => {
 });
 
 /* ═══════════ BOOT ═══════════ */
-(async function boot(){
+window.addEventListener('DOMContentLoaded', async () => {
   await loadCatalog();
   loadUserData();
   renderHome();
-})();
+});
 </script>
 
 </body>
