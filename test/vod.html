@@ -551,26 +551,28 @@ searchInputEl.addEventListener('focus', () => { searchWrapEl.classList.add('focu
 searchInputEl.addEventListener('blur', () => { if (!searchFocused) searchWrapEl.classList.remove('focused'); });
 
 /* ═══════════ HERO GIORNALIERO ═══════════ */
-function pickDailyHero(candidates){
-  if (!candidates.length) return null;
-  const today = new Date().toISOString().slice(0, 10);
-  let stored = null;
-  try { stored = JSON.parse(localStorage.getItem('hero_daily_v3') || 'null'); } catch(e) { stored = null; }
+function pickHero(){
+  if (HERO_POOL.length === 0) HERO_POOL = CATALOG.filter(x => x.backdrop);
+  if (HERO_POOL.length === 0) return null;
 
-  if (stored && stored.date === today && stored.key){
-    const match = candidates.find(x => `${x.type}_${x.tmdb_id}` === stored.key);
-    if (match) return match;
+  let lastKey = null;
+  try { lastKey = localStorage.getItem('hero_last_v6'); } catch(e) {}
+
+  // 50% chance: un titolo dai recenti (escluso l'ultimo mostrato)
+  const recentPool = recents.filter(r => r.backdrop && itemKey(r) !== lastKey);
+  const useRecent = recentPool.length > 0 && Math.random() < 0.5;
+
+  let chosen;
+  if (useRecent) {
+    const pick = recentPool[Math.floor(Math.random() * recentPool.length)];
+    chosen = CATALOG.find(x => itemKey(x) === itemKey(pick)) || pick;
+  } else {
+    let pool = HERO_POOL.filter(x => itemKey(x) !== lastKey);
+    if (!pool.length) pool = HERO_POOL;
+    chosen = pool[Math.floor(Math.random() * pool.length)];
   }
-  const lastKey = stored ? stored.key : null;
-  let pool = candidates.filter(x => `${x.type}_${x.tmdb_id}` !== lastKey);
-  if (!pool.length) pool = candidates;
-  const chosen = pool[Math.floor(Math.random() * pool.length)];
-  try {
-    localStorage.setItem('hero_daily_v3', JSON.stringify({
-      date: today,
-      key: `${chosen.type}_${chosen.tmdb_id}`
-    }));
-  } catch(e) {}
+
+  try { localStorage.setItem('hero_last_v6', itemKey(chosen)); } catch(e) {}
   return chosen;
 }
 
@@ -831,7 +833,7 @@ function renderHome(opts = {}){
   if (HERO_POOL.length === 0){
     HERO_POOL = CATALOG.filter(x => x.backdrop);
   }
-  const heroCandidate = pickDailyHero(HERO_POOL) || HERO_POOL[0];
+  const heroCandidate = pickHero();
   if (heroCandidate){
     heroItem = heroCandidate;
     renderHero(heroCandidate);
