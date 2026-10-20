@@ -1518,6 +1518,14 @@ window.addEventListener('DOMContentLoaded', async () => {
   loadUserData();
   renderHome();
 });
+/* Registra il Service Worker per cachare le immagini */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .then(r => console.log('[sw] OK:', r.scope))
+      .catch(e => console.warn('[sw] ERRORE:', e.message));
+  });
+}
 </script>
 
 </body>
