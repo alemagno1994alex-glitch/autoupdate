@@ -67,8 +67,7 @@ main { position: relative; z-index: 3; padding-bottom: 100px; min-height: 40vh; 
 /* ▼ OTTIMIZZAZIONE: content-visibility per righe fuori viewport */
 .row-section {
   margin-bottom: 40px;
-  content-visibility: auto;
-  contain-intrinsic-size: auto 360px;
+  min-height: 360px;
 }
 
 .row-header { display: flex; align-items: baseline; justify-content: space-between; padding: 0 48px; margin-bottom: 14px; }
@@ -198,7 +197,7 @@ main { position: relative; z-index: 3; padding-bottom: 100px; min-height: 40vh; 
   .row-header { padding: 0 20px; }
   .row-scroll { padding: 6px 20px 16px; gap: 12px; }
   .card { width: 150px; }
-  .row-section { contain-intrinsic-size: auto 320px; }
+  .row-section { min-height: 320px; }
   #detail-body { padding: 0 22px 28px; }
   #detail-backdrop { height: 260px; }
   #detail-title { font-size: 1.55rem; }
@@ -276,7 +275,7 @@ main { position: relative; z-index: 3; padding-bottom: 100px; min-height: 40vh; 
   </div>
 </div>
 
-<script defer src="catalog.js"></script>
+<script defer src="https://alemagno1994alex-glitch.github.io/autoupdate/test/catalog.js"></script>
 
 <script>
 /* ═══════════ CONFIG ═══════════ */
@@ -908,8 +907,8 @@ function renderHome(opts = {}){
   }
   // ▲▲▲ FINE NUOVE USCITE ▲▲▲
 
-  if (movies.length > 0) rowDefs.push({ title: '🎬 Film', items: movies });
-  if (tvShows.length > 0) rowDefs.push({ title: '📺 Serie TV', items: tvShows });
+  if (movies.length > 0) rowDefs.push({ title: '🎬 Film', items: movies.slice(0, 80) });
+if (tvShows.length > 0) rowDefs.push({ title: '📺 Serie TV', items: tvShows.slice(0, 80) });
 
   
 
@@ -1001,9 +1000,33 @@ function setFocus(rowIndex, colIndex){
   const card = document.querySelector(`.card[data-row="${focusedRow}"][data-col="${focusedCol}"]`);
   if (card){
     card.classList.add('focused');
-    card.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
     lastFocusedCard = card;
+
+    // Verticale: istantaneo, titolo della riga subito sotto l'header
+    if (section){
+      const top = window.scrollY + section.getBoundingClientRect().top - 68 - 16;
+      window.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
+    }
+
+    // Orizzontale: solo la riga, smooth
+    const rowEl = card.parentElement;
+    const rr = rowEl.getBoundingClientRect();
+    const cr = card.getBoundingClientRect();
+    const left = rowEl.scrollLeft + (cr.left - rr.left) - (rowEl.clientWidth - cr.width) / 2;
+    rowEl.scrollTo({ left: Math.max(0, left), behavior: 'smooth' });
   }
+  prefetchRows(focusedRow);
+}
+
+let _prefetchTimer = null;
+function prefetchRows(from){
+  clearTimeout(_prefetchTimer);
+  _prefetchTimer = setTimeout(() => {
+    for (let i = from + 1; i <= from + 2 && i < rows.length; i++){
+      const sec = document.querySelector(`.row-section[data-row-index="${i}"]`);
+      if (sec && sec.dataset.rendered !== '1') materializeRow(i, sec);
+    }
+  }, 120);
 }
 
 function moveFocus(direction){
