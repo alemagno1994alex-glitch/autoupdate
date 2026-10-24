@@ -424,9 +424,41 @@ function refreshCatalogInBackground(){
   s.onerror = () => { _refreshInFlight = false; };
   document.head.appendChild(s);
 }
-function getScUrl(item){
-  if (item.sc_id) return `${SC_BASE}/it/watch/${item.sc_id}`;
-  return `${SC_BASE}/it/search?q=${encodeURIComponent(item.title || '')}`;
+function getScUrl(item, season, episode){
+  if (!item) return SC_BASE;
+
+  // Preferiti/recenti salvano solo i campi base: recupera la versione
+  // completa dal CATALOG per avere episodes/sc_slug/sc_url freschi.
+  let ref = item;
+  if (item.type === 'tv') {
+    const key = itemKey(item);
+    const found = CATALOG.find(x => itemKey(x) === key);
+    if (found) ref = found;
+  }
+
+  // ── FILM ──
+  if (ref.type !== 'tv') {
+    if (ref.sc_id) return `${SC_BASE}/it/watch/${ref.sc_id}`;
+    return `${SC_BASE}/it/search?q=${encodeURIComponent(ref.title || '')}`;
+  }
+
+  // ── SERIE TV: episodio specifico ── usa SOLO sc_url
+  if (season != null && episode != null) {
+    const ep = (ref.episodes || []).find(
+      e => e.season === season && e.episode === episode
+    );
+    if (ep && ep.sc_url) return ep.sc_url;
+  }
+
+  // ── SERIE TV: pulsante "Play" generico → primo episodio ──
+  if (Array.isArray(ref.episodes) && ref.episodes.length > 0 && ref.episodes[0].sc_url) {
+    return ref.episodes[0].sc_url;
+  }
+
+  // ── SERIE TV: fallback → pagina titolo (mai /watch/undefined) ──
+  if (ref.sc_id && ref.sc_slug) return `${SC_BASE}/it/titles/${ref.sc_id}-${ref.sc_slug}`;
+  if (ref.sc_id) return `${SC_BASE}/it/titles/${ref.sc_id}`;
+  return `${SC_BASE}/it/search?q=${encodeURIComponent(ref.title || '')}`;
 }
 
 /* ═══════════ STATO ═══════════ */
@@ -1271,9 +1303,9 @@ async function loadSeasonFromTMDB(tvId, seasonNum){
       list.innerHTML = '<div class="ep-info-msg">Nessun episodio.</div>';
       return;
     }
-    const target = getScUrl(currentDetailItem);
     list.innerHTML = episodes.map(ep => {
       const img = ep.still_path ? IMG(ep.still_path, 'w300') : null;
+      const target = getScUrl(currentDetailItem, seasonNum, ep.episode_number);
       return `
         <div class="episode-item" onclick="openExternal('${esc(target)}')">
           ${img
