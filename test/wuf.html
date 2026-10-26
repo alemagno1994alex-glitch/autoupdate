@@ -2,11 +2,15 @@
 <html lang="it">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0b0b0b">
 <title>SKY WEB — EPG</title>
 <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
 <style>
+/* ===================================================================
+   RESPONSIVE — design fluido mobile → tablet → desktop → TV 4K
+   Tutto scala con clamp(); nessun valore px fisso per il layout.
+   =================================================================== */
 :root {
   --bg: #0b0b0b;
   --panel: #1f1f1f;
@@ -17,61 +21,88 @@
   --text-dim: #b3b3b3;
   --text-soft: #cccccc;
   color-scheme: dark;
+
+  /* --- layout fluido --- */
+  --pad-top-bar-y: clamp(0.7rem, 1.5vh, 1.1rem);
+  --pad-top-bar-x: clamp(0.8rem, 2.5vw, 2rem);
+  --pad-row-x:     clamp(14px, 2.5vw, 40px);
+  --pad-group-x:   clamp(14px, 2.5vw, 26px);
+  --pad-scroll-b:  clamp(20px, 4vh, 40px);
+  --gap-cards:     clamp(10px, 1.2vw, 16px);
+  --gap-groups:    clamp(20px, 4vh, 40px);
+
+  /* --- dimensioni card (mobile-first) --- */
+  --card-w: clamp(230px, 78vw, 340px);
+
+  /* --- tipografia fluida --- */
+  --fs-station:  clamp(1rem, 0.9vw + 0.7rem, 1.5rem);
+  --fs-clock:    clamp(0.95rem, 0.8vw + 0.6rem, 1.4rem);
+  --fs-search:   clamp(12px, 0.3vw + 0.7rem, 14px);
+  --fs-group:    clamp(0.78rem, 0.4vw + 0.6rem, 0.95rem);
+  --fs-ch-name:  clamp(0.62rem, 0.3vw + 0.5rem, 0.75rem);
+  --fs-epg:      clamp(0.85rem, 0.6vw + 0.6rem, 1.05rem);
+  --fs-time:     clamp(0.72rem, 0.4vw + 0.55rem, 0.88rem);
+  --fs-badge:    clamp(0.6rem, 0.3vw + 0.5rem, 0.7rem);
 }
+
+/* Tablet: card più larghe in vw */
+@media (min-width: 480px) {
+  :root { --card-w: clamp(260px, 34vw, 340px); }
+}
+/* Desktop: torniamo a ~22vw */
+@media (min-width: 1024px) {
+  :root {
+    --card-w: clamp(280px, 22vw, 360px);
+    --fs-search: clamp(12px, 0.3vw + 0.7rem, 14px);
+  }
+}
+/* TV / ultrawide: tutto più grande, come da distanza di visione */
+@media (min-width: 1920px) {
+  :root {
+    --card-w: clamp(360px, 19vw, 480px);
+    --fs-station: clamp(1.3rem, 0.9vw + 0.8rem, 1.9rem);
+    --fs-clock:   clamp(1.2rem, 0.8vw + 0.7rem, 1.8rem);
+    --fs-epg:     clamp(1.05rem, 0.6vw + 0.7rem, 1.3rem);
+    --fs-time:    clamp(0.9rem, 0.4vw + 0.65rem, 1.1rem);
+    --fs-group:   clamp(0.95rem, 0.4vw + 0.7rem, 1.15rem);
+  }
+}
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 /* ================= BLOCCO SCROLL E FOCUS NATIVI ================= */
-html, body {
+html {
   overflow: hidden !important;
-  height: 100vh !important;
-  width: 100vw !important;
-  margin: 0;
-  padding: 0;
-  position: fixed;
-  top: 0; left: 0;
+  height: 100%;
+  width: 100%;
 }
 body {
+  /* Body = flex column con altezza viewport dinamica.
+     La top-bar è un figlio flex, la scrollArea prende il resto. */
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   background: var(--bg);
   color: var(--text);
   font-size: 16px;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
 }
 *:focus, *:focus-visible { outline: none !important; }
-/* Disabilita focus visivo nativo ovunque */
 :focus { outline: none !important; box-shadow: none; }
 
-#keycatcher {
-  position: fixed;
-  inset: 0;
-  width: 100vw;
-  height: 100vh;
-  outline: none;
-  overflow: hidden;
-  z-index: 1;
-}
-#scrollArea {
-  position: absolute;
-  inset: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-bright) transparent;
-  padding-top: 90px;
-  padding-bottom: 40px;
-}
-#scrollArea::-webkit-scrollbar { width: 8px; }
-#scrollArea::-webkit-scrollbar-track { background: var(--bg); }
-#scrollArea::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 4px; }
-
+/* ================= SFONDI DECORATIVI ================= */
 #matrix-canvas {
   position: fixed; top: 0; left: 0;
   width: 100%; height: 100%;
   z-index: 0; opacity: 0.06; pointer-events: none;
 }
 .grid-overlay {
-  position: fixed; width: 100%; height: 100%;
+  position: fixed; inset: 0;
   background-image:
     linear-gradient(rgba(229,9,20,.03) 1px, transparent 1px),
     linear-gradient(90deg, rgba(229,9,20,.03) 1px, transparent 1px);
@@ -86,41 +117,62 @@ body {
 }
 @keyframes scanMove { 0% { top:-1% } 100% { top:100% } }
 
+/* ================= TOP BAR (flex child) ================= */
 .top-bar {
-  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
-  padding: 1.1rem 2rem;
-  padding-top: calc(1.1rem + env(safe-area-inset-top, 0px));
-  display: flex; justify-content: space-between; align-items: center;
-  gap: 16px;
+  position: relative;
+  z-index: 100;
+  flex-shrink: 0;
+  padding: var(--pad-top-bar-y) var(--pad-top-bar-x);
+  padding-top:    calc(var(--pad-top-bar-y) + env(safe-area-inset-top, 0px));
+  padding-left:   calc(var(--pad-top-bar-x) + env(safe-area-inset-left, 0px));
+  padding-right:  calc(var(--pad-top-bar-x) + env(safe-area-inset-right, 0px));
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: clamp(8px, 1.5vw, 16px);
   border-bottom: 2px solid var(--red);
   background: linear-gradient(180deg, rgba(0,0,0,.95), rgba(11,11,11,.92));
   flex-wrap: wrap;
 }
 .station-id {
-  display: flex; align-items: center; gap: .7rem;
+  display: flex; align-items: center; gap: .6rem;
   font-family: 'Orbitron', sans-serif;
-  font-weight: 900; font-size: 1.4rem; letter-spacing: -.4px;
-  white-space: nowrap;
+  font-weight: 900; font-size: var(--fs-station);
+  letter-spacing: -.3px; white-space: nowrap;
 }
 .station-id .logo-text { color: var(--red); }
 .station-id .dot {
-  display: inline-block; width: 10px; height: 10px;
+  display: inline-block;
+  width: clamp(7px, 0.7vw, 10px);
+  height: clamp(7px, 0.7vw, 10px);
   border-radius: 50%; background: var(--red);
   box-shadow: 0 0 10px var(--red);
   animation: pulse 2s infinite;
 }
 @keyframes pulse { 50% { opacity: .4; } }
 
-.search-wrap { flex: 1; max-width: 360px; position: relative; min-width: 160px; }
+.search-wrap {
+  flex: 1 1 200px;
+  max-width: min(400px, 100%);
+  min-width: 0;
+  position: relative;
+}
 .search {
   width: 100%;
   padding: 10px 34px 10px 38px;
-  font-family: inherit; font-size: 14px;
+  font-family: inherit;
+  font-size: var(--fs-search);
   color: #fff; background: #000;
   border: 1px solid var(--border-bright);
   border-radius: 4px;
   outline: none;
   transition: border-color .15s, box-shadow .15s;
+  -webkit-appearance: none;
+  appearance: none;
+}
+@media (max-width: 700px) {
+  /* iOS non fa auto-zoom se font >= 16px */
+  .search { font-size: 16px; }
 }
 .search::placeholder {
   color: var(--text-dim); letter-spacing: 1px;
@@ -136,43 +188,83 @@ body {
 }
 .clock {
   font-family: 'Share Tech Mono', monospace;
-  font-size: 1.4rem; font-weight: 700;
+  font-size: var(--fs-clock); font-weight: 700;
   color: var(--red); letter-spacing: 2px;
-  min-width: 70px; text-align: right;
+  min-width: 60px; text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
+/* ================= KEYCATCHER / SCROLL AREA ================= */
+#keycatcher {
+  position: relative;
+  flex: 1;
+  width: 100%;
+  min-height: 0;              /* necessario per overflow in flex */
+  outline: none;
+  overflow: hidden;
+  z-index: 1;
+}
+#scrollArea {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-bright) transparent;
+  padding-bottom: max(var(--pad-scroll-b), env(safe-area-inset-bottom, 0px));
+  -webkit-overflow-scrolling: touch;
+}
+#scrollArea::-webkit-scrollbar { width: 8px; }
+#scrollArea::-webkit-scrollbar-track { background: var(--bg); }
+#scrollArea::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 4px; }
+
 #groups-container { position: relative; z-index: 3; }
 
-.group { display: flex; flex-direction: column; gap: 14px; margin-bottom: 40px; }
+.group {
+  display: flex; flex-direction: column;
+  gap: clamp(10px, 1.2vh, 14px);
+  margin-bottom: var(--gap-groups);
+}
 .group-title {
   font-weight: 800; text-transform: uppercase;
-  margin-left: 26px; color: var(--red);
-  letter-spacing: 2px; font-size: .95rem;
-  display: flex; align-items: center; gap: 1rem;
+  margin-left: var(--pad-group-x);
+  color: var(--red);
+  letter-spacing: clamp(1px, 0.15vw, 2px);
+  font-size: var(--fs-group);
+  display: flex; align-items: center;
+  gap: 1rem;
   font-family: 'Orbitron', sans-serif;
 }
 .group-title::before { content: '> '; color: var(--red); }
 .group-title::after {
-  content: ''; flex: 1; margin-right: 20px; height: 1px;
+  content: ''; flex: 1;
+  margin-right: clamp(10px, 2vw, 20px);
+  height: 1px;
   background: linear-gradient(90deg, var(--red), transparent);
 }
 
 .row {
-  display: flex; gap: 16px;
+  display: flex;
+  gap: var(--gap-cards);
   overflow-x: auto; overflow-y: hidden;
-  padding: 8px 40px 18px 26px;
+  padding: 8px var(--pad-row-x) 18px var(--pad-group-x);
   scrollbar-width: thin;
   scrollbar-color: var(--border-bright) transparent;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  scroll-padding-left: var(--pad-group-x);
 }
 .row::-webkit-scrollbar { height: 6px; }
 .row::-webkit-scrollbar-track { background: transparent; }
 .row::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 3px; }
 
-/* CARD — NESSUN comportamento interattivo. No cursor, no listener, no tabindex. */
+/* CARD — dimensioni fluide, ratio 2:1, nessuna interazione nativa */
 .card {
-  flex: 0 0 320px; height: 160px;
-  border-radius: 8px; position: relative;
+  flex: 0 0 var(--card-w);
+  aspect-ratio: 2 / 1;
+  min-width: 0;
+  border-radius: clamp(6px, 0.6vw, 8px);
+  position: relative;
   overflow: hidden;
   background: var(--panel);
   display: flex; flex-direction: row;
@@ -190,9 +282,9 @@ body {
   box-shadow: 0 0 0 3px rgba(229,9,20,.55), 0 0 34px rgba(229,9,20,.4);
   z-index: 15;
 }
-
 .card-thumb {
-  width: 120px; flex-shrink: 0;
+  width: 37.5%;
+  flex-shrink: 0;
   background: #0a0a0a center/cover no-repeat;
   border-right: 1px solid var(--border);
   position: relative;
@@ -206,7 +298,8 @@ body {
   position: absolute; inset: 0;
   display: grid; place-items: center;
   font-family: 'Orbitron', sans-serif;
-  font-size: 26px; font-weight: 900;
+  font-size: clamp(18px, 2vw, 26px);
+  font-weight: 900;
   color: rgba(229,9,20,.8);
   letter-spacing: 1px;
   z-index: 1;
@@ -215,33 +308,37 @@ body {
   position: absolute; top: 6px; right: 6px;
   background: rgba(0,0,0,.85);
   border: 1px solid var(--red); color: var(--red);
-  font-size: .65rem; font-weight: 700;
+  font-size: var(--fs-badge); font-weight: 700;
   padding: 2px 7px; border-radius: 10px;
   letter-spacing: 1px; z-index: 5;
 }
 .card-info {
-  flex: 1; padding: 12px 14px;
+  flex: 1; min-width: 0;
+  padding: clamp(8px, 1vw, 14px);
   display: flex; flex-direction: column; justify-content: center;
   overflow: hidden; text-align: left;
 }
 .card-channel {
-  font-size: .7rem; color: var(--text-dim);
+  font-size: var(--fs-ch-name);
+  color: var(--text-dim);
   text-transform: uppercase; letter-spacing: 1px;
-  margin-bottom: 6px;
+  margin-bottom: clamp(3px, 0.5vh, 6px);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .ch-epg {
-  font-size: 1.05rem; font-weight: 700; color: #fff;
+  font-size: var(--fs-epg);
+  font-weight: 700; color: #fff;
   line-height: 1.3;
   display: -webkit-box;
   -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   overflow: hidden;
-  margin-bottom: 8px;
+  margin-bottom: clamp(4px, 0.6vh, 8px);
   min-height: 2.6em;
 }
 .ch-time {
-  font-size: .85rem; color: var(--red);
-  font-weight: 700; letter-spacing: 1px;
+  font-size: var(--fs-time);
+  color: var(--red); font-weight: 700;
+  letter-spacing: 1px;
   font-variant-numeric: tabular-nums;
   min-height: 1.2em;
 }
@@ -252,44 +349,62 @@ body {
   font-weight: 700;
 }
 
-/* ============ POPUP ============ */
+/* ================= POPUP ================= */
 .epg-popup {
   position: fixed; inset: 0;
   background: rgba(0,0,0,.94);
   display: flex; align-items: center; justify-content: center;
-  z-index: 9999; padding: 20px;
+  z-index: 9999;
+  padding: clamp(8px, 2vw, 20px);
+  padding-top:    max(clamp(8px, 2vw, 20px), env(safe-area-inset-top, 0px));
+  padding-bottom: max(clamp(8px, 2vw, 20px), env(safe-area-inset-bottom, 0px));
 }
 .epg-popup.hidden { display: none; }
 .epg-popup-content {
-  width: 100%; max-width: 700px; height: 90vh;
+  width: 100%;
+  max-width: min(700px, 92vw);
+  height: 90vh;
+  height: 90dvh;
+  max-height: 100%;            /* si adatta al parent flex */
   overflow-y: auto; overflow-x: hidden;
-  padding: 20px 20px 40px 20px;
+  padding: clamp(14px, 2vw, 20px) clamp(14px, 2vw, 20px) 40px;
   background: var(--panel);
   border: 1px solid var(--border-bright);
   border-radius: 8px;
   position: relative;
   overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 .epg-popup-content::-webkit-scrollbar { width: 10px; }
 .epg-popup-content::-webkit-scrollbar-track { background: rgba(0,0,0,.4); border-radius: 5px; }
 .epg-popup-content::-webkit-scrollbar-thumb { background: var(--red); border-radius: 5px; }
 
 .epg-inner {
-  width: 100%; display: flex; flex-direction: column; align-items: center; gap: 16px;
+  width: 100%;
+  display: flex; flex-direction: column;
+  align-items: center;
+  gap: clamp(12px, 2vh, 16px);
 }
 .popup-header {
-  display: flex; gap: 16px; align-items: center;
-  width: 100%; max-width: 600px; text-align: left;
+  display: flex;
+  gap: clamp(10px, 2vw, 16px);
+  align-items: center;
+  width: 100%; max-width: 600px;
+  text-align: left;
 }
 .popup-cover {
-  width: 150px; height: 96px; flex-shrink: 0;
+  width: clamp(90px, 22vw, 150px);
+  aspect-ratio: 3 / 2;
+  height: auto;
+  flex-shrink: 0;
   object-fit: cover; border-radius: 6px;
   border: 2px solid var(--border-bright);
   transition: transform .15s ease, border-color .15s ease;
   background: #0a0a0a;
   display: grid; place-items: center;
   font-family: 'Orbitron', sans-serif;
-  font-size: 24px; font-weight: 900; color: var(--red);
+  font-size: clamp(16px, 2vw, 24px);
+  font-weight: 900; color: var(--red);
   cursor: pointer;
 }
 .popup-cover.popup-focused {
@@ -298,16 +413,20 @@ body {
 }
 .popup-header-info { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .epg-title {
-  font-size: 1.15rem; font-weight: 800; color: #fff;
-  letter-spacing: .3px; line-height: 1.3; margin-bottom: 8px;
+  font-size: clamp(1rem, 0.6vw + 0.8rem, 1.15rem);
+  font-weight: 800; color: #fff;
+  letter-spacing: .3px; line-height: 1.3;
+  margin-bottom: 8px;
   text-shadow: 0 2px 6px rgba(0,0,0,.8);
 }
 .cover-time {
   display: inline-flex; align-items: center; gap: 6px;
-  background: rgba(0,0,0,.85); border: 1px solid var(--border-bright);
+  background: rgba(0,0,0,.85);
+  border: 1px solid var(--border-bright);
   padding: 4px 10px; border-radius: 3px;
-  font-size: .85rem; font-weight: 700;
-  letter-spacing: 1px; align-self: flex-start;
+  font-size: clamp(0.78rem, 0.4vw + 0.65rem, 0.9rem);
+  font-weight: 700; letter-spacing: 1px;
+  align-self: flex-start;
   font-variant-numeric: tabular-nums;
 }
 .cover-time span { color: var(--red); }
@@ -315,8 +434,9 @@ body {
 .epg-desc-box {
   width: 100%; max-width: 600px;
   background: rgba(255,255,255,.04);
-  border: 2px solid var(--border); border-radius: 6px;
-  padding: 14px 16px;
+  border: 2px solid var(--border);
+  border-radius: 6px;
+  padding: clamp(10px, 1.5vw, 16px);
   transition: border-color .15s, box-shadow .15s;
 }
 .epg-desc-box.popup-focused {
@@ -325,99 +445,168 @@ body {
 }
 .epg-desc-label {
   color: var(--red); text-transform: uppercase;
-  font-size: .7rem; letter-spacing: 2px; font-weight: 700;
+  font-size: clamp(0.65rem, 0.3vw + 0.55rem, 0.72rem);
+  letter-spacing: 2px; font-weight: 700;
   margin-bottom: 10px;
   display: flex; justify-content: space-between; align-items: center;
+  gap: 8px;
 }
 .scroll-hint {
-  color: var(--text-dim); font-size: .7rem; letter-spacing: 1px;
-  animation: blink 1.6s infinite; text-transform: none; font-weight: 600;
+  color: var(--text-dim);
+  font-size: clamp(0.6rem, 0.3vw + 0.5rem, 0.7rem);
+  letter-spacing: 1px;
+  animation: blink 1.6s infinite;
+  text-transform: none; font-weight: 600;
+  white-space: nowrap;
 }
 @keyframes blink { 50% { opacity: .4; } }
 .epg-desc {
-  font-size: .95rem; color: var(--text-soft);
+  font-size: clamp(0.85rem, 0.4vw + 0.7rem, 0.95rem);
+  color: var(--text-soft);
   line-height: 1.6; text-align: left;
-  max-height: 180px; overflow-y: auto; padding-right: 10px;
+  max-height: 180px; overflow-y: auto;
+  padding-right: 10px;
 }
 .epg-desc::-webkit-scrollbar { width: 8px; }
 .epg-desc::-webkit-scrollbar-track { background: rgba(0,0,0,.4); border-radius: 4px; }
 .epg-desc::-webkit-scrollbar-thumb { background: var(--red); border-radius: 4px; }
 
 .sources-section {
-  width: 100%; max-width: 600px; padding: 14px;
+  width: 100%; max-width: 600px;
+  padding: clamp(10px, 1.5vw, 14px);
   background: rgba(255,255,255,.04);
-  border: 1px solid var(--border-bright); border-radius: 6px;
+  border: 1px solid var(--border-bright);
+  border-radius: 6px;
 }
 .sources-title {
   color: var(--red); text-transform: uppercase;
-  font-size: .95rem; margin-bottom: 12px;
-  letter-spacing: 2px; font-weight: 800; text-align: center;
+  font-size: clamp(0.82rem, 0.4vw + 0.7rem, 0.95rem);
+  margin-bottom: 12px;
+  letter-spacing: 2px; font-weight: 800;
+  text-align: center;
 }
 .source-btn {
   display: flex; align-items: center; gap: 12px;
-  width: 100%; padding: 14px 16px; margin-bottom: 8px;
-  font-family: inherit; font-size: .95rem; font-weight: 600;
-  color: #fff; background: rgba(255,255,255,.06);
-  border: 2px solid var(--border); border-radius: 5px;
+  width: 100%;
+  padding: clamp(10px, 1.5vw, 14px) clamp(12px, 1.5vw, 16px);
+  margin-bottom: 8px;
+  font-family: inherit;
+  font-size: clamp(0.85rem, 0.4vw + 0.7rem, 0.95rem);
+  font-weight: 600;
+  color: #fff;
+  background: rgba(255,255,255,.06);
+  border: 2px solid var(--border);
+  border-radius: 5px;
   cursor: pointer; text-align: left; outline: none;
   transition: all .15s ease;
+  min-height: 48px;   /* touch target */
 }
 .source-btn:last-child { margin-bottom: 0; }
 .source-btn.popup-focused {
-  background: rgba(229,9,20,.22); border-color: var(--red);
+  background: rgba(229,9,20,.22);
+  border-color: var(--red);
   box-shadow: 0 0 0 3px rgba(229,9,20,.45), 0 0 22px rgba(229,9,20,.5);
 }
 .source-play { color: var(--red); font-size: 1.3rem; flex-shrink: 0; }
-.source-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+.source-label {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-weight: 700;
+}
 .source-badge {
-  font-size: .7rem; color: var(--red); letter-spacing: 1px;
-  padding: 3px 9px; border: 1px solid var(--red); border-radius: 10px;
-  background: rgba(229,9,20,.1); font-weight: 700; flex-shrink: 0;
+  font-size: clamp(0.6rem, 0.3vw + 0.5rem, 0.7rem);
+  color: var(--red); letter-spacing: 1px;
+  padding: 3px 9px;
+  border: 1px solid var(--red);
+  border-radius: 10px;
+  background: rgba(229,9,20,.1);
+  font-weight: 700; flex-shrink: 0;
 }
 .source-btn.is-backup .source-badge {
   color: #ffcc66; border-color: #ffcc66; background: rgba(255,204,102,.1);
 }
 
 .next-programs {
-  width: 100%; max-width: 600px; padding: 14px;
+  width: 100%; max-width: 600px;
+  padding: clamp(10px, 1.5vw, 14px);
   background: rgba(255,255,255,.04);
-  border: 1px solid var(--border); border-radius: 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
 }
 .next-programs-title {
   color: var(--text-dim); text-transform: uppercase;
-  font-size: .8rem; margin-bottom: 10px;
-  letter-spacing: 2px; font-weight: 800; text-align: center;
+  font-size: clamp(0.72rem, 0.3vw + 0.6rem, 0.8rem);
+  margin-bottom: 10px;
+  letter-spacing: 2px; font-weight: 800;
+  text-align: center;
 }
 .next-program {
   display: flex; align-items: center; gap: 12px;
-  font-size: .9rem; padding: 10px 0;
+  font-size: clamp(0.82rem, 0.4vw + 0.65rem, 0.9rem);
+  padding: 10px 0;
   border-bottom: 1px solid var(--border);
   color: var(--text); text-align: left;
 }
 .next-program:last-child { border-bottom: none; }
 .next-thumb {
-  width: 70px; height: 45px; object-fit: cover;
+  width: clamp(56px, 8vw, 70px);
+  aspect-ratio: 14 / 9; height: auto;
+  object-fit: cover;
   border-radius: 3px; flex-shrink: 0;
   border: 1px solid var(--border-bright);
   background: #0a0a0a;
 }
 .next-program-time {
-  color: var(--red); min-width: 55px; text-align: right;
+  color: var(--red);
+  min-width: clamp(42px, 5vw, 55px);
+  text-align: right;
   font-weight: 700; letter-spacing: 1px;
   font-variant-numeric: tabular-nums;
 }
 
+/* ================= MEDIA QUERY SPECIFICHE ================= */
+
+/* Smartphone molto piccoli */
+@media (max-width: 360px) {
+  :root {
+    --card-w: clamp(210px, 82vw, 280px);
+    --pad-group-x: 12px;
+    --pad-row-x: 12px;
+  }
+}
+
+/* Landscape su telefoni: top bar compatta, card più basse */
+@media (orientation: landscape) and (max-height: 520px) {
+  :root {
+    --card-w: clamp(200px, 30vw, 300px);
+    --pad-top-bar-y: 0.5rem;
+    --gap-groups: 24px;
+  }
+  .top-bar { flex-wrap: nowrap; }
+  .search-wrap { max-width: 240px; }
+  .station-id { font-size: 1rem; }
+  .clock { font-size: 0.95rem; }
+}
+
+/* Tablet portrait: la search va sotto per respirare */
 @media (max-width: 700px) {
-  .top-bar { padding: 0.9rem 1rem; gap: 10px; }
-  .station-id { font-size: 1.1rem; }
-  .search-wrap { max-width: 100%; flex-basis: 100%; }
-  .clock { font-size: 1rem; min-width: 50px; }
-  .group-title { margin-left: 16px; }
-  .row { padding: 8px 32px 18px 16px; }
-  .card { flex: 0 0 280px; height: 140px; }
-  .card-thumb { width: 105px; }
-  .ch-epg { font-size: .95rem; }
-  .popup-cover { width: 110px; height: 70px; }
+  .top-bar {
+    flex-wrap: wrap;
+  }
+  .search-wrap {
+    order: 3;
+    flex-basis: 100%;
+    max-width: 100%;
+  }
+}
+
+/* ================= RIDUZIONE MOVIMENTO ================= */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
 }
 </style>
 </head>
@@ -684,7 +873,6 @@ function buildLayout(){
       const card = document.createElement('div');
       card.className = 'card';
       card.dataset.index = String(idx);
-      // NOTA: nessun tabindex, nessun listener, nessun cursor
       const srcCount = (c.sources && c.sources.length) || 1;
       const badgeHTML = srcCount > 1 ? `<div class="source-count-badge">${srcCount} SRC</div>` : '';
       const fallbackHTML = c.logo ? '' : `<span class="thumb-fallback">${escapeHtml(initials(c.name))}</span>`;
@@ -710,7 +898,6 @@ function buildLayout(){
   applyFocusVisual();
 }
 
-/* Click delegation sul container (le card non hanno listener) */
 document.getElementById('groups-container').addEventListener('click', e => {
   const card = e.target.closest('.card');
   if (!card) return;
@@ -765,7 +952,8 @@ function ensureCardInView(card){
   if (row){
     const cRect = card.getBoundingClientRect();
     const rRect = row.getBoundingClientRect();
-    const padL = 30, padR = 40;
+    // padding laterale preso dal CSS (fallback ragionevole)
+    const padL = 20, padR = 32;
     if (cRect.left < rRect.left + padL){
       row.scrollLeft += (cRect.left - rRect.left) - padL;
     } else if (cRect.right > rRect.right - padR){
@@ -776,8 +964,9 @@ function ensureCardInView(card){
   const sa = document.getElementById('scrollArea');
   if (!sa) return;
   const saRect = sa.getBoundingClientRect();
-  const topBarH = 90;
-  const safeTop = saRect.top + topBarH;
+  // NUOVO LAYOUT: la scrollArea parte già sotto la top-bar,
+  // quindi basta un piccolo buffer sopra.
+  const safeTop = saRect.top + 8;
   const safeBot = saRect.bottom - 40;
   let newTop = sa.scrollTop;
   if (rect.top < safeTop){
@@ -794,19 +983,16 @@ function ensureCardInView(card){
 
 /* ============================================================
    SCROLL GUARD
-   - Se il browser scrolla senza che sia io, ripristino
    ============================================================ */
 const saEl = document.getElementById('scrollArea');
 saEl.addEventListener('scroll', () => {
   if (Date.now() < programmaticScrollUntil) return;
-  // Il browser ha scrollato di sua iniziativa
   if (Math.abs(saEl.scrollTop - desiredScrollTop) > 3){
     programmaticScrollUntil = Date.now() + 200;
     saEl.scrollTop = desiredScrollTop;
   }
 }, { passive: true });
 
-/* Anche window.scrollY deve restare a 0 */
 window.addEventListener('scroll', () => {
   if (window.scrollX !== 0 || window.scrollY !== 0){
     window.scrollTo(0, 0);
@@ -815,8 +1001,6 @@ window.addEventListener('scroll', () => {
 
 /* ============================================================
    FOCUS GUARD
-   - Se il focus DOM va su un elemento diverso da #keycatcher e #searchInput,
-     lo riporto indietro su #keycatcher
    ============================================================ */
 let focusGuardActive = false;
 document.addEventListener('focusin', e => {
@@ -865,7 +1049,6 @@ function moveFocus(dir){
       targetR += delta;
     }
     if (dir === 'up'){
-      // Prima riga → sali sulla search box
       setSaScroll(0);
       const searchEl = document.getElementById('searchInput');
       if (searchEl){
@@ -889,7 +1072,6 @@ function refocusCatcher(){
   if (!kc) return;
   const active = document.activeElement;
   if (active === kc) return;
-  // NON rubare il focus a search o ai bottoni sorgente
   if (active && (
         active.id === 'searchInput' ||
         (active.classList && active.classList.contains('source-btn'))
@@ -912,15 +1094,12 @@ function masterKeyHandler(e){
 
   if (isPopupOpen()) return;
 
-  // Nella search: lascia passare il testo, ma intercetta frecce verticali/esc
-    if (inSearch){
+  if (inSearch){
     const kc0 = Number(e.keyCode) || Number(e.which) || 0;
 
-    // Backspace / Delete = modifica testo, NON "go back"
     const isBackspace = kc0 === 8 || kc0 === 46
                      || e.key === 'Backspace' || e.key === 'Delete';
     if (isBackspace){
-      // lascia al browser: l'evento 'input' farà ripartire applySearch()
       return;
     }
 
@@ -954,11 +1133,9 @@ function masterKeyHandler(e){
       return;
     }
 
-    // left/right e digitazione passano normalmente
     return;
   }
 
-  // BLOCCO TOTALE
   e.preventDefault();
   e.stopImmediatePropagation();
   e.stopPropagation();
@@ -1216,7 +1393,6 @@ function applySearch(q){
    ============================================================ */
 buildLayout();
 refocusCatcher();
-// Rilancia il focus periodicamente per sicurezza
 setInterval(refocusCatcher, 1000);
 
 downloadEPG();
