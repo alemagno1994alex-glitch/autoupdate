@@ -213,7 +213,9 @@ body {
   scrollbar-color: var(--border-bright) transparent;
   padding-bottom: max(var(--pad-scroll-b), env(safe-area-inset-bottom, 0px));
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;   /* <-- AGGIUNGI QUESTA */
 }
+
 #scrollArea::-webkit-scrollbar { width: 8px; }
 #scrollArea::-webkit-scrollbar-track { background: var(--bg); }
 #scrollArea::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 4px; }
@@ -662,7 +664,7 @@ let focusC = 0;
 let focusedCard = null;
 let navLockUntil = 0;
 let desiredScrollTop = 0;
-let programmaticScrollUntil = 0;
+
 
 let popupFocusables = [];
 let popupFocusIdx   = 0;
@@ -940,10 +942,9 @@ function applyFocusVisual(){
 }
 
 function setSaScroll(top){
-  programmaticScrollUntil = Date.now() + 200;
-  desiredScrollTop = top;
   const sa = document.getElementById('scrollArea');
   if (sa) sa.scrollTop = top;
+  desiredScrollTop = top;
 }
 
 function ensureCardInView(card){
@@ -984,15 +985,22 @@ function ensureCardInView(card){
 /* ============================================================
    SCROLL GUARD
    ============================================================ */
+/* ============================================================
+   SCROLL TRACKING
+   Il vecchio "scroll guard" forzava saEl.scrollTop a
+   desiredScrollTop ad ogni scroll → in landscape (viewport
+   corta) riportava sempre al primo carosello.
+   Ora tracciamo soltanto la posizione: il touch/wheel scroll
+   non viene mai contrastato.
+   ============================================================ */
 const saEl = document.getElementById('scrollArea');
 saEl.addEventListener('scroll', () => {
-  if (Date.now() < programmaticScrollUntil) return;
-  if (Math.abs(saEl.scrollTop - desiredScrollTop) > 3){
-    programmaticScrollUntil = Date.now() + 200;
-    saEl.scrollTop = desiredScrollTop;
-  }
+  desiredScrollTop = saEl.scrollTop;
 }, { passive: true });
 
+/* Il body è position:fixed / overflow:hidden — questa è solo
+   una rete di sicurezza per WebView che provano a scrollare il
+   documento; non tocca #scrollArea. */
 window.addEventListener('scroll', () => {
   if (window.scrollX !== 0 || window.scrollY !== 0){
     window.scrollTo(0, 0);
