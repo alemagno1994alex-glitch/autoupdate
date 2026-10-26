@@ -1,0 +1,1227 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b0b0b">
+<title>SKY WEB — EPG</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0b0b0b;
+  --panel: #1f1f1f;
+  --red: #e50914;
+  --border: #2a2a2a;
+  --border-bright: #333333;
+  --text: #ffffff;
+  --text-dim: #b3b3b3;
+  --text-soft: #cccccc;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ================= BLOCCO SCROLL E FOCUS NATIVI ================= */
+html, body {
+  overflow: hidden !important;
+  height: 100vh !important;
+  width: 100vw !important;
+  margin: 0;
+  padding: 0;
+  position: fixed;
+  top: 0; left: 0;
+}
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+*:focus, *:focus-visible { outline: none !important; }
+/* Disabilita focus visivo nativo ovunque */
+:focus { outline: none !important; box-shadow: none; }
+
+#keycatcher {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  outline: none;
+  overflow: hidden;
+  z-index: 1;
+}
+#scrollArea {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-bright) transparent;
+  padding-top: 90px;
+  padding-bottom: 40px;
+}
+#scrollArea::-webkit-scrollbar { width: 8px; }
+#scrollArea::-webkit-scrollbar-track { background: var(--bg); }
+#scrollArea::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 4px; }
+
+#matrix-canvas {
+  position: fixed; top: 0; left: 0;
+  width: 100%; height: 100%;
+  z-index: 0; opacity: 0.06; pointer-events: none;
+}
+.grid-overlay {
+  position: fixed; width: 100%; height: 100%;
+  background-image:
+    linear-gradient(rgba(229,9,20,.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(229,9,20,.03) 1px, transparent 1px);
+  background-size: 24px 24px;
+  z-index: 0; pointer-events: none;
+}
+.scanline {
+  position: fixed; top: -100%; left: 0; width: 100%; height: 4px;
+  background: linear-gradient(transparent, rgba(229,9,20,.08), transparent);
+  z-index: 0; pointer-events: none;
+  animation: scanMove 8s linear infinite;
+}
+@keyframes scanMove { 0% { top:-1% } 100% { top:100% } }
+
+.top-bar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  padding: 1.1rem 2rem;
+  padding-top: calc(1.1rem + env(safe-area-inset-top, 0px));
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 16px;
+  border-bottom: 2px solid var(--red);
+  background: linear-gradient(180deg, rgba(0,0,0,.95), rgba(11,11,11,.92));
+  flex-wrap: wrap;
+}
+.station-id {
+  display: flex; align-items: center; gap: .7rem;
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 900; font-size: 1.4rem; letter-spacing: -.4px;
+  white-space: nowrap;
+}
+.station-id .logo-text { color: var(--red); }
+.station-id .dot {
+  display: inline-block; width: 10px; height: 10px;
+  border-radius: 50%; background: var(--red);
+  box-shadow: 0 0 10px var(--red);
+  animation: pulse 2s infinite;
+}
+@keyframes pulse { 50% { opacity: .4; } }
+
+.search-wrap { flex: 1; max-width: 360px; position: relative; min-width: 160px; }
+.search {
+  width: 100%;
+  padding: 10px 34px 10px 38px;
+  font-family: inherit; font-size: 14px;
+  color: #fff; background: #000;
+  border: 1px solid var(--border-bright);
+  border-radius: 4px;
+  outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.search::placeholder {
+  color: var(--text-dim); letter-spacing: 1px;
+  text-transform: uppercase; font-size: 11px;
+}
+.search:focus { border-color: var(--red); box-shadow: 0 0 0 2px rgba(229,9,20,.25); }
+.search::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
+.search-wrap > svg.ic {
+  position: absolute; left: 12px; top: 50%;
+  transform: translateY(-50%);
+  width: 15px; height: 15px;
+  fill: var(--red); pointer-events: none;
+}
+.clock {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 1.4rem; font-weight: 700;
+  color: var(--red); letter-spacing: 2px;
+  min-width: 70px; text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+#groups-container { position: relative; z-index: 3; }
+
+.group { display: flex; flex-direction: column; gap: 14px; margin-bottom: 40px; }
+.group-title {
+  font-weight: 800; text-transform: uppercase;
+  margin-left: 26px; color: var(--red);
+  letter-spacing: 2px; font-size: .95rem;
+  display: flex; align-items: center; gap: 1rem;
+  font-family: 'Orbitron', sans-serif;
+}
+.group-title::before { content: '> '; color: var(--red); }
+.group-title::after {
+  content: ''; flex: 1; margin-right: 20px; height: 1px;
+  background: linear-gradient(90deg, var(--red), transparent);
+}
+
+.row {
+  display: flex; gap: 16px;
+  overflow-x: auto; overflow-y: hidden;
+  padding: 8px 40px 18px 26px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-bright) transparent;
+}
+.row::-webkit-scrollbar { height: 6px; }
+.row::-webkit-scrollbar-track { background: transparent; }
+.row::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 3px; }
+
+/* CARD — NESSUN comportamento interattivo. No cursor, no listener, no tabindex. */
+.card {
+  flex: 0 0 320px; height: 160px;
+  border-radius: 8px; position: relative;
+  overflow: hidden;
+  background: var(--panel);
+  display: flex; flex-direction: row;
+  border: 1px solid var(--border);
+  transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+  -webkit-tap-highlight-color: transparent;
+  will-change: transform;
+  user-select: none;
+  -webkit-user-drag: none;
+  pointer-events: auto;
+}
+.card.focused {
+  transform: scale(1.03);
+  border-color: var(--red);
+  box-shadow: 0 0 0 3px rgba(229,9,20,.55), 0 0 34px rgba(229,9,20,.4);
+  z-index: 15;
+}
+
+.card-thumb {
+  width: 120px; flex-shrink: 0;
+  background: #0a0a0a center/cover no-repeat;
+  border-right: 1px solid var(--border);
+  position: relative;
+}
+.card-thumb::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent 50%, rgba(0,0,0,.55));
+  pointer-events: none;
+}
+.thumb-fallback {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 26px; font-weight: 900;
+  color: rgba(229,9,20,.8);
+  letter-spacing: 1px;
+  z-index: 1;
+}
+.source-count-badge {
+  position: absolute; top: 6px; right: 6px;
+  background: rgba(0,0,0,.85);
+  border: 1px solid var(--red); color: var(--red);
+  font-size: .65rem; font-weight: 700;
+  padding: 2px 7px; border-radius: 10px;
+  letter-spacing: 1px; z-index: 5;
+}
+.card-info {
+  flex: 1; padding: 12px 14px;
+  display: flex; flex-direction: column; justify-content: center;
+  overflow: hidden; text-align: left;
+}
+.card-channel {
+  font-size: .7rem; color: var(--text-dim);
+  text-transform: uppercase; letter-spacing: 1px;
+  margin-bottom: 6px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ch-epg {
+  font-size: 1.05rem; font-weight: 700; color: #fff;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-bottom: 8px;
+  min-height: 2.6em;
+}
+.ch-time {
+  font-size: .85rem; color: var(--red);
+  font-weight: 700; letter-spacing: 1px;
+  font-variant-numeric: tabular-nums;
+  min-height: 1.2em;
+}
+.empty {
+  padding: 80px 20px; text-align: center;
+  color: var(--text-dim); font-size: 14px;
+  letter-spacing: 3px; text-transform: uppercase;
+  font-weight: 700;
+}
+
+/* ============ POPUP ============ */
+.epg-popup {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.94);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 9999; padding: 20px;
+}
+.epg-popup.hidden { display: none; }
+.epg-popup-content {
+  width: 100%; max-width: 700px; height: 90vh;
+  overflow-y: auto; overflow-x: hidden;
+  padding: 20px 20px 40px 20px;
+  background: var(--panel);
+  border: 1px solid var(--border-bright);
+  border-radius: 8px;
+  position: relative;
+  overscroll-behavior: contain;
+}
+.epg-popup-content::-webkit-scrollbar { width: 10px; }
+.epg-popup-content::-webkit-scrollbar-track { background: rgba(0,0,0,.4); border-radius: 5px; }
+.epg-popup-content::-webkit-scrollbar-thumb { background: var(--red); border-radius: 5px; }
+
+.epg-inner {
+  width: 100%; display: flex; flex-direction: column; align-items: center; gap: 16px;
+}
+.popup-header {
+  display: flex; gap: 16px; align-items: center;
+  width: 100%; max-width: 600px; text-align: left;
+}
+.popup-cover {
+  width: 150px; height: 96px; flex-shrink: 0;
+  object-fit: cover; border-radius: 6px;
+  border: 2px solid var(--border-bright);
+  transition: transform .15s ease, border-color .15s ease;
+  background: #0a0a0a;
+  display: grid; place-items: center;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 24px; font-weight: 900; color: var(--red);
+  cursor: pointer;
+}
+.popup-cover.popup-focused {
+  transform: scale(1.05); border-color: var(--red);
+  box-shadow: 0 0 0 3px rgba(229,9,20,.5), 0 0 24px rgba(229,9,20,.5);
+}
+.popup-header-info { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.epg-title {
+  font-size: 1.15rem; font-weight: 800; color: #fff;
+  letter-spacing: .3px; line-height: 1.3; margin-bottom: 8px;
+  text-shadow: 0 2px 6px rgba(0,0,0,.8);
+}
+.cover-time {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: rgba(0,0,0,.85); border: 1px solid var(--border-bright);
+  padding: 4px 10px; border-radius: 3px;
+  font-size: .85rem; font-weight: 700;
+  letter-spacing: 1px; align-self: flex-start;
+  font-variant-numeric: tabular-nums;
+}
+.cover-time span { color: var(--red); }
+
+.epg-desc-box {
+  width: 100%; max-width: 600px;
+  background: rgba(255,255,255,.04);
+  border: 2px solid var(--border); border-radius: 6px;
+  padding: 14px 16px;
+  transition: border-color .15s, box-shadow .15s;
+}
+.epg-desc-box.popup-focused {
+  border-color: var(--red);
+  box-shadow: 0 0 0 3px rgba(229,9,20,.45), 0 0 26px rgba(229,9,20,.35);
+}
+.epg-desc-label {
+  color: var(--red); text-transform: uppercase;
+  font-size: .7rem; letter-spacing: 2px; font-weight: 700;
+  margin-bottom: 10px;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.scroll-hint {
+  color: var(--text-dim); font-size: .7rem; letter-spacing: 1px;
+  animation: blink 1.6s infinite; text-transform: none; font-weight: 600;
+}
+@keyframes blink { 50% { opacity: .4; } }
+.epg-desc {
+  font-size: .95rem; color: var(--text-soft);
+  line-height: 1.6; text-align: left;
+  max-height: 180px; overflow-y: auto; padding-right: 10px;
+}
+.epg-desc::-webkit-scrollbar { width: 8px; }
+.epg-desc::-webkit-scrollbar-track { background: rgba(0,0,0,.4); border-radius: 4px; }
+.epg-desc::-webkit-scrollbar-thumb { background: var(--red); border-radius: 4px; }
+
+.sources-section {
+  width: 100%; max-width: 600px; padding: 14px;
+  background: rgba(255,255,255,.04);
+  border: 1px solid var(--border-bright); border-radius: 6px;
+}
+.sources-title {
+  color: var(--red); text-transform: uppercase;
+  font-size: .95rem; margin-bottom: 12px;
+  letter-spacing: 2px; font-weight: 800; text-align: center;
+}
+.source-btn {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; padding: 14px 16px; margin-bottom: 8px;
+  font-family: inherit; font-size: .95rem; font-weight: 600;
+  color: #fff; background: rgba(255,255,255,.06);
+  border: 2px solid var(--border); border-radius: 5px;
+  cursor: pointer; text-align: left; outline: none;
+  transition: all .15s ease;
+}
+.source-btn:last-child { margin-bottom: 0; }
+.source-btn.popup-focused {
+  background: rgba(229,9,20,.22); border-color: var(--red);
+  box-shadow: 0 0 0 3px rgba(229,9,20,.45), 0 0 22px rgba(229,9,20,.5);
+}
+.source-play { color: var(--red); font-size: 1.3rem; flex-shrink: 0; }
+.source-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+.source-badge {
+  font-size: .7rem; color: var(--red); letter-spacing: 1px;
+  padding: 3px 9px; border: 1px solid var(--red); border-radius: 10px;
+  background: rgba(229,9,20,.1); font-weight: 700; flex-shrink: 0;
+}
+.source-btn.is-backup .source-badge {
+  color: #ffcc66; border-color: #ffcc66; background: rgba(255,204,102,.1);
+}
+
+.next-programs {
+  width: 100%; max-width: 600px; padding: 14px;
+  background: rgba(255,255,255,.04);
+  border: 1px solid var(--border); border-radius: 6px;
+}
+.next-programs-title {
+  color: var(--text-dim); text-transform: uppercase;
+  font-size: .8rem; margin-bottom: 10px;
+  letter-spacing: 2px; font-weight: 800; text-align: center;
+}
+.next-program {
+  display: flex; align-items: center; gap: 12px;
+  font-size: .9rem; padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text); text-align: left;
+}
+.next-program:last-child { border-bottom: none; }
+.next-thumb {
+  width: 70px; height: 45px; object-fit: cover;
+  border-radius: 3px; flex-shrink: 0;
+  border: 1px solid var(--border-bright);
+  background: #0a0a0a;
+}
+.next-program-time {
+  color: var(--red); min-width: 55px; text-align: right;
+  font-weight: 700; letter-spacing: 1px;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 700px) {
+  .top-bar { padding: 0.9rem 1rem; gap: 10px; }
+  .station-id { font-size: 1.1rem; }
+  .search-wrap { max-width: 100%; flex-basis: 100%; }
+  .clock { font-size: 1rem; min-width: 50px; }
+  .group-title { margin-left: 16px; }
+  .row { padding: 8px 32px 18px 16px; }
+  .card { flex: 0 0 280px; height: 140px; }
+  .card-thumb { width: 105px; }
+  .ch-epg { font-size: .95rem; }
+  .popup-cover { width: 110px; height: 70px; }
+}
+</style>
+</head>
+<body>
+<canvas id="matrix-canvas"></canvas>
+<div class="grid-overlay"></div>
+<div class="scanline"></div>
+
+<header class="top-bar">
+  <div class="station-id">
+    <span class="logo-text">SKY WEB</span>
+    <span class="dot"></span>
+  </div>
+  <div class="search-wrap">
+    <svg class="ic" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+    <input class="search" id="searchInput" type="search" placeholder="Cerca canali…" autocomplete="off" spellcheck="false" autocapitalize="off">
+  </div>
+  <div class="clock" id="clock">--:--</div>
+</header>
+
+<div id="keycatcher" tabindex="0">
+  <div id="scrollArea">
+    <main id="groups-container">
+      <div class="empty">Caricamento canali…</div>
+    </main>
+  </div>
+</div>
+
+<div id="epg-popup" class="epg-popup hidden">
+  <div class="epg-popup-content" id="popupHost">
+    <div class="epg-inner"></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+<script>
+const CHANNELS  = [{"name": "Sky CINEMA Action", "tag": "CINEMA", "logo": "https://pixel.disco.nowtv.it/logo/skychb_206_darknow/LOGO_CHANNEL_LIGHT/300?language=it-IT&proposition=NOWOTT", "tvgId": "Sky.CINEMA.Action.it", "sources": [{"label": "Sky CINEMA Action", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8xNQ==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky CINEMA Action", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy85NTk2#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky CINEMA Action", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy80ODk2NQ==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}, {"name": "Sky CINEMA Collection", "tag": "CINEMA", "logo": "https://pixel.disco.nowtv.it/logo/skychb_204_darknow/LOGO_CHANNEL_LIGHT/300?language=it-IT&proposition=NOWOTT", "tvgId": "Sky.CINEMA.Collection.it", "sources": [{"label": "Sky CINEMA Collection", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy85NTk1#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky CINEMA Collection", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy80ODk1Mw==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky CINEMA Collection", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8xMg==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}, {"name": "Sky CINEMA Comedy", "tag": "CINEMA", "logo": "http://service.myvisio.life:80/images/74a3f9f519021c6066bd3b4e1087cd58.png", "tvgId": "Sky.CINEMA.Comedy.it", "sources": [{"label": "Sky CINEMA Comedy", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8xNA==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky CINEMA Comedy", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy80ODk2Mw==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky CINEMA Comedy", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8yNDc0NA==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}, {"name": "Sky CINEMA Drama", "tag": "CINEMA", "logo": "http://service.myvisio.life:80/images/0b51fde0914f31605872eb147a2557ee.png", "tvgId": "Sky.CINEMA.Drama.it", "sources": [{"label": "Sky CINEMA Drama", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8zMjEwNw==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky CINEMA Drama", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy80ODk2MQ==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky CINEMA Drama", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy80Nw==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}, {"name": "Sky CINEMA Stories", "tag": "CINEMA", "logo": "http://bs-update.ddns.net/Android/logos/skyCINEMA-due-.png", "tvgId": "Sky.CINEMA.Stories.it", "sources": [{"label": "Sky CINEMA Stories", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy80ODk1MA==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky CINEMA Stories", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8yNDg4NQ==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky CINEMA Stories", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy85NjIy#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}, {"name": "Sky CINEMA Family", "tag": "CINEMA", "logo": "https://pixel.disco.nowtv.it/logo/skychb_255_darknow/LOGO_CHANNEL_LIGHT/300?language=it-IT&proposition=NOWOTT", "tvgId": "Sky.CINEMA.Family.it", "sources": [{"label": "Sky CINEMA Family", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy85NTg0#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky CINEMA Family", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy80ODk1NQ==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky CINEMA Family", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8xMw==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}, {"name": "Sky CINEMA Romance", "tag": "CINEMA", "logo": "http://static.iptv-epg.com/it/SkyCINEMARomance.it.png", "tvgId": "Sky.CINEMA.Romance.it", "sources": [{"label": "Sky CINEMA Romance", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy80ODk1OQ==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky CINEMA Romance", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy83MQ==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky CINEMA Romance", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8yNDc0Mw==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}, {"name": "Sky CINEMA Suspense", "tag": "CINEMA", "logo": "https://pixel.disco.nowtv.it/logo/skychb_47_darknow/LOGO_CHANNEL_LIGHT/300?language=it-IT&proposition=NOWOTT", "tvgId": "Sky.CINEMA.Suspense.it", "sources": [{"label": "Sky CINEMA Suspense", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy85NTg3#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky CINEMA Suspense", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8yNDg4Ng==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}, {"name": "Sky CINEMA Uno", "tag": "CINEMA", "logo": "https://pixel.disco.nowtv.it/logo/skychb_202_darknow/LOGO_CHANNEL_LIGHT/300?language=it-IT&proposition=NOWOTT", "tvgId": "Sky.CINEMA.Uno.it", "sources": [{"label": "Sky CINEMA Uno", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy80ODk0Nw==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky CINEMA Uno", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy80ODg2Mw==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky CINEMA Uno", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy80NDk2#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}, {"name": "History", "tag": "INTRATTENIMENTO", "logo": "https://pixel.disco.nowtv.it/logo/skychb_513_darknow/LOGO_CHANNEL_LIGHT/300?language=it-IT&proposition=NOWOTT", "tvgId": "History.it", "sources": [{"label": "History", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy80ODY2OQ==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "History", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy80OTcyOA==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "History", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy85NQ==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}, {"name": "Sky Adventure", "tag": "INTRATTENIMENTO", "logo": "https://pixel.disco.nowtv.it/logo/skychb_961_darknow/LOGO_CHANNEL_LIGHT/300?language=it-IT&proposition=NOWOTT", "tvgId": "Sky.Adventure.it", "sources": [{"label": "Sky Adventure", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8yMjY4MTk=#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky Adventure", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8yMjY4MjA=#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}, {"name": "Sky Arte", "tag": "INTRATTENIMENTO", "logo": "https://pixel.disco.nowtv.it/logo/skychb_74_darknow/LOGO_CHANNEL_LIGHT/300?language=it-IT&proposition=NOWOTT", "tvgId": "Sky.Arte.it", "sources": [{"label": "Sky Arte", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy80OTcyMQ==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky Arte", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8yNjMzOA==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky Arte", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy84OA==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}, {"name": "Sky Atlantic", "tag": "INTRATTENIMENTO", "logo": "https://pixel.disco.nowtv.it/logo/skychb_226_darknow/LOGO_CHANNEL_LIGHT/300?language=it-IT&proposition=NOWOTT", "tvgId": "Sky.Atlantic.it", "sources": [{"label": "Sky Atlantic", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy80OTcwNg==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky Atlantic", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8xOA==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky Atlantic", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy85NTg5#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}, {"name": "Comedy Central", "tag": "INTRATTENIMENTO", "logo": "https://pixel.disco.nowtv.it/logo/skychb_404_darknow/LOGO_CHANNEL_LIGHT/300?language=it-IT&proposition=NOWOTT", "tvgId": "Comedy.Central.it", "sources": [{"label": "Comedy Central", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8yMjY4MjE=#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Comedy Central", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy80ODk2Nw==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Comedy Central", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8yOTQ=#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}, {"name": "Sky Documentaries", "tag": "INTRATTENIMENTO", "logo": "https://pixel.disco.nowtv.it/logo/skychb_697_darknow/LOGO_CHANNEL_LIGHT/300?language=it-IT&proposition=NOWOTT", "tvgId": "Sky.Documentaries.it", "sources": [{"label": "Sky Documentaries", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8xNDY4MzM=#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky Documentaries", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8xNDY4MzI=#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky Documentaries", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8xNDY4MzE=#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}, {"name": "Sky Investigation", "tag": "INTRATTENIMENTO", "logo": "https://pixel.disco.nowtv.it/logo/skychb_686_darknow/LOGO_CHANNEL_LIGHT/300?language=it-IT&proposition=NOWOTT", "tvgId": "Sky.Investigation.it", "sources": [{"label": "Sky Investigation", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8xNDY4NDA=#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky Investigation", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8xNDY4NDE=#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky Investigation", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8xNDY4NDI=#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}, {"name": "Sky Nature", "tag": "INTRATTENIMENTO", "logo": "https://pixel.disco.nowtv.it/logo/skychb_695_darknow/LOGO_CHANNEL_LIGHT/300?language=it-IT&proposition=NOWOTT", "tvgId": "Sky.Nature.it", "sources": [{"label": "Sky Nature", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8xNDY4Mzc=#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky Nature", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8xNDY4Mzg=#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky Nature", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8xNDY4Mzk=#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}, {"name": "Sky Serie", "tag": "INTRATTENIMENTO", "logo": "https://pixel.disco.nowtv.it/logo/skychb_684_darknow/LOGO_CHANNEL_LIGHT/300?language=it-IT&proposition=NOWOTT", "tvgId": "Sky.Serie.it", "sources": [{"label": "Sky Serie", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8xNDY4MzQ=#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky Serie", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8xNDY4MzU=#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky Serie", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8xNDY4MzY=#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}, {"name": "SKY UNO", "tag": "INTRATTENIMENTO", "logo": "https://pixel.disco.nowtv.it/logo/skychb_477_lightnow/LOGO_CHANNEL_DARK/300?language=it-IT&proposition=NOWOTT", "tvgId": "sky.uno.it", "sources": [{"label": "SKY UNO", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy80OTcwNA==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "SKY UNO", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy80OA==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "SKY UNO", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8yNDc0Ng==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}, {"name": "Sky Sport 251", "tag": "SPORT", "logo": "https://pixel.disco.nowtv.it/logo/skychb_917_darknow/LOGO_CHANNEL_LIGHT/300?language=it-IT&proposition=NOWOTT", "tvgId": "Sky.Sport..251.it", "sources": [{"label": "Sky Sport 251", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy80OTc1Mw==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}, {"name": "Sky Sport 252", "tag": "SPORT", "logo": "https://pixel.disco.nowtv.it/logo/skychb_917_darknow/LOGO_CHANNEL_LIGHT/300?language=it-IT&proposition=NOWOTT", "tvgId": "Sky.Sport..252.it", "sources": [{"label": "Sky Sport 252", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy80OTc1NA==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}, {"name": "Sky Sport 253", "tag": "SPORT", "logo": "https://pixel.disco.nowtv.it/logo/skychb_917_darknow/LOGO_CHANNEL_LIGHT/300?language=it-IT&proposition=NOWOTT", "tvgId": "Sky.Sport..253.it", "sources": [{"label": "Sky Sport 253", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy80OTc1NQ==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}, {"name": "Sky Sport 254", "tag": "SPORT", "logo": "https://pixel.disco.nowtv.it/logo/skychb_917_darknow/LOGO_CHANNEL_LIGHT/300?language=it-IT&proposition=NOWOTT", "tvgId": "Sky.Sport..254.it", "sources": [{"label": "Sky Sport 254", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy80OTc1Ng==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}, {"name": "Sky Sport 255", "tag": "SPORT", "logo": "https://pixel.disco.nowtv.it/logo/skychb_917_darknow/LOGO_CHANNEL_LIGHT/300?language=it-IT&proposition=NOWOTT", "tvgId": "Sky.Sport..255.it", "sources": [{"label": "Sky Sport 255", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy80OTc1Nw==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}, {"name": "Sky Sport 256", "tag": "SPORT", "logo": "https://pixel.disco.nowtv.it/logo/skychb_917_darknow/LOGO_CHANNEL_LIGHT/300?language=it-IT&proposition=NOWOTT", "tvgId": "Sky.Sport..256.it", "sources": [{"label": "Sky Sport 256", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy80OTc1OA==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}, {"name": "Sky Sport 24", "tag": "SPORT", "logo": "https://pixel.disco.nowtv.it/logo/skychb_35_darknow/LOGO_CHANNEL_LIGHT/300?language=it-IT&proposition=NOWOTT", "tvgId": "Sky.Sport24.it", "sources": [{"label": "Sky Sport 24", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8yMg==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky Sport 24", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8yNzk3NQ==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky Sport 24", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy80OTc0Ng==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}, {"name": "Sky Sport Arena", "tag": "SPORT", "logo": "https://pixel.disco.nowtv.it/logo/skychb_24_darknow/LOGO_CHANNEL_LIGHT/300?language=it-IT&proposition=NOWOTT", "tvgId": "Sky.Sport.Arena.it", "sources": [{"label": "Sky Sport Arena", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy80OTc0OA==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky Sport Arena", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8yNzk1NA==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky Sport Arena", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8yNzk1Ng==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}, {"name": "Sky Sport Calcio", "tag": "SPORT", "logo": "https://pixel.disco.nowtv.it/logo/skychb_209_darknow/LOGO_CHANNEL_LIGHT/300?language=it-IT&proposition=NOWOTT", "tvgId": "Sky.Sport.Calcio.it", "sources": [{"label": "Sky Sport Calcio", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy80OTc1Mg==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}, {"name": "Sky Sport F1", "tag": "SPORT", "logo": "https://pixel.disco.nowtv.it/logo/skychb_478_darknow/LOGO_CHANNEL_LIGHT/300?language=it-IT&proposition=NOWOTT", "tvgId": "Sky.Sport.F1.it", "sources": [{"label": "Sky Sport F1", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8yNg==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky Sport F1", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy80OTc0MA==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky Sport F1", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy80NDk3#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}, {"name": "Sky Sport Golf", "tag": "SPORT", "logo": "https://pixel.disco.nowtv.it/logo/skychb_768_darknow/LOGO_CHANNEL_LIGHT/300?language=it-IT&proposition=NOWOTT", "tvgId": "Sky.Sport.Golf.it", "sources": [{"label": "Sky Sport Golf", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8yMTUzNDY=#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky Sport Golf", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8yMTUzNDc=#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}, {"name": "Sky Sport Legend", "tag": "SPORT", "logo": "https://pixel.disco.nowtv.it/logo/skychb_578_darknow/LOGO_CHANNEL_LIGHT/300?language=it-IT&proposition=NOWOTT", "tvgId": "Sky.Sport.Legend.it", "sources": [{"label": "Sky Sport Legend", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8yMjY4MTc=#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky Sport Legend", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8yMjY4MTY=#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}, {"name": "Sky Sport Max", "tag": "SPORT", "logo": "https://pixel.disco.nowtv.it/logo/skychb_248_darknow/LOGO_CHANNEL_LIGHT/300?language=it-IT&proposition=NOWOTT", "tvgId": "Sky.Sport.Max.it", "sources": [{"label": "Sky Sport Max", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8xNTA4MDQ=#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky Sport Max", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8xNTA4MDM=#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}, {"name": "Sky Sport Mix", "tag": "SPORT", "logo": "https://pixel.disco.nowtv.it/logo/skychb_579_darknow/LOGO_CHANNEL_LIGHT/300?language=it-IT&proposition=NOWOTT", "tvgId": "Sky.Sport.Mix.it", "sources": [{"label": "Sky Sport Mix", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8yMjY4MTU=#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky Sport Mix", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8yMjY4MTQ=#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}, {"name": "Sky Sport MotoGP", "tag": "SPORT", "logo": "https://pixel.disco.nowtv.it/logo/skychb_483_darknow/LOGO_CHANNEL_LIGHT/300?language=it-IT&proposition=NOWOTT", "tvgId": "Sky.Sport.MotoGP.it", "sources": [{"label": "Sky Sport MotoGP", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy80OTc0MQ==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky Sport MotoGP", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy84Mg==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky Sport MotoGP", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy80NDk4#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}, {"name": "Sky Sport Basket", "tag": "SPORT", "logo": "https://pixel.disco.nowtv.it/logo/skychb_764_darknow/LOGO_CHANNEL_LIGHT/300?language=it-IT&proposition=NOWOTT", "tvgId": "Sky.Sport.NBA.it", "sources": [{"label": "Sky Sport Basket", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8yNzk2MQ==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky Sport Basket", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8yNzk2MA==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky Sport Basket", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy80OTc1MQ==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}, {"name": "Sky Sport Tennis", "tag": "SPORT", "logo": "https://pixel.disco.nowtv.it/logo/skychb_559_darknow/LOGO_CHANNEL_LIGHT/300?language=it-IT&proposition=NOWOTT", "tvgId": "Sky.Sport.Tennis.it", "sources": [{"label": "Sky Sport Tennis", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8xNDY0ODY=#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky Sport Tennis", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8xNDY0ODU=#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky Sport Tennis", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8xNDY0ODc=#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}, {"name": "Sky Sport Uno", "tag": "SPORT", "logo": "https://pixel.disco.nowtv.it/logo/skychb_23_darknow/LOGO_CHANNEL_LIGHT/300?language=it-IT&proposition=NOWOTT", "tvgId": "Sky.Sport.Uno.it", "sources": [{"label": "Sky Sport Uno", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8xOQ==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky Sport Uno", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy80OTc0Nw==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}, {"label": "Sky Sport Uno", "url": "intent://aHR0cDovL2V4dHJlbWUuc2VsZmlwLmNvL1hOaEI3amFKUTYvaGVOWkRLQ0dlNy8yOTA0Mg==#Intent;scheme=xmtv;package=co.wuffy.player;end", "isBackup": false}]}];
+const EPG_URL   = "https://epgshare01.online/epgshare01/epg_ripper_IT1.xml.gz";
+const EPG_PROXY = "https://proxy2.alemagno1994alex.workers.dev/";
+
+const DEFAULT_COVER = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 120"><rect width="200" height="120" fill="%231a1a1a"/><text x="100" y="74" font-size="44" text-anchor="middle" fill="%23e50914" font-family="Orbitron,sans-serif" font-weight="900">TV</text></svg>';
+
+let channelsData    = CHANNELS.slice();
+let allProgramsMap  = {};
+let epgLoaded       = false;
+
+/* ============================================================
+   STATO
+   ============================================================ */
+let rowsCache = [];
+let focusR = 0;
+let focusC = 0;
+let focusedCard = null;
+let navLockUntil = 0;
+let desiredScrollTop = 0;
+let programmaticScrollUntil = 0;
+
+let popupFocusables = [];
+let popupFocusIdx   = 0;
+let popupNavLockUntil = 0;
+
+const NAV_LOCK_MS = 220;
+
+/* ============================================================
+   HELPER TASTI
+   ============================================================ */
+function getDir(e){
+  const kc = Number(e.keyCode) || Number(e.which) || 0;
+  if (kc === 37) return 'left';
+  if (kc === 38) return 'up';
+  if (kc === 39) return 'right';
+  if (kc === 40) return 'down';
+  const k = String(e.key || '').toLowerCase();
+  if (k === 'arrowleft'  || k === 'left')  return 'left';
+  if (k === 'arrowright' || k === 'right') return 'right';
+  if (k === 'arrowup'    || k === 'up')    return 'up';
+  if (k === 'arrowdown'  || k === 'down')  return 'down';
+  const c = String(e.code || '');
+  if (c === 'ArrowLeft')  return 'left';
+  if (c === 'ArrowRight') return 'right';
+  if (c === 'ArrowUp')    return 'up';
+  if (c === 'ArrowDown')  return 'down';
+  return null;
+}
+function isEnter(e){
+  const kc = Number(e.keyCode) || Number(e.which) || 0;
+  return kc === 13 || kc === 32 || kc === 23
+      || e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar';
+}
+function isEscape(e){
+  const kc = Number(e.keyCode) || Number(e.which) || 0;
+  return kc === 27 || kc === 8 || kc === 461 || kc === 10009
+      || e.key === 'Escape' || e.key === 'Esc' || e.key === 'Backspace' || e.key === 'GoBack';
+}
+
+/* ============================================================
+   HTML escape
+   ============================================================ */
+const HTML_MAP = { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' };
+function escapeHtml(s){
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => HTML_MAP[c]);
+}
+function initials(name){
+  const p = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if (!p.length) return 'TV';
+  return (p[0][0] + (p[1] ? p[1][0] : '')).toUpperCase();
+}
+
+/* ============================================================
+   CLOCK
+   ============================================================ */
+function tickClock(){
+  const el = document.getElementById('clock');
+  const now = new Date();
+  el.textContent = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+}
+tickClock();
+setInterval(tickClock, 15000);
+
+/* ============================================================
+   MATRIX
+   ============================================================ */
+(function(){
+  const c = document.getElementById('matrix-canvas');
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  let cols = [], w = 0, h = 0;
+  const chars = 'アイウエオカキクケコサシスセソタチツテトナニヌネノ0123456789';
+  function resize(){
+    w = c.width = window.innerWidth;
+    h = c.height = window.innerHeight;
+    const count = Math.floor(w / 22);
+    cols = Array.from({length: count}, () => Math.random() * h);
+  }
+  resize();
+  window.addEventListener('resize', resize);
+  function draw(){
+    ctx.fillStyle = 'rgba(11,11,11,0.06)';
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#e50914';
+    ctx.font = '14px monospace';
+    cols.forEach((y, i) => {
+      const ch = chars[Math.floor(Math.random() * chars.length)];
+      ctx.fillText(ch, i * 22, y);
+      cols[i] = y > h + Math.random() * 8000 ? 0 : y + 20;
+    });
+  }
+  setInterval(draw, 90);
+})();
+
+/* ============================================================
+   EPG
+   ============================================================ */
+function parseEpgDate(s){
+  try {
+    const c = s.split(' ')[0];
+    const y = +c.slice(0,4), m = +c.slice(4,6)-1, d = +c.slice(6,8);
+    const hh = +c.slice(8,10), mm = +c.slice(10,12), ss = +c.slice(12,14);
+    return new Date(Date.UTC(y, m, d, hh, mm, ss));
+  } catch(e){ return new Date(0); }
+}
+function formatTime(d){
+  try { return d.toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'}); }
+  catch(e){ return '--:--'; }
+}
+async function downloadEPG(){
+  if (!EPG_URL || !EPG_PROXY) return;
+  try {
+    const r = await fetch(EPG_PROXY + encodeURIComponent(EPG_URL));
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const buf = await r.arrayBuffer();
+    const xmlStr = pako.ungzip(new Uint8Array(buf), {to:'string'});
+    const xml = new DOMParser().parseFromString(xmlStr, 'application/xml');
+    const programmes = xml.querySelectorAll('programme');
+    if (!programmes.length) return;
+    const tmp = {};
+    programmes.forEach(p => {
+      const ch = (p.getAttribute('channel') || '').toLowerCase().trim();
+      if (!ch) return;
+      const start = parseEpgDate(p.getAttribute('start') || '');
+      const stop  = parseEpgDate(p.getAttribute('stop')  || '');
+      const title = (p.querySelector('title')?.textContent || 'Programma').trim();
+      const desc  = (p.querySelector('desc')?.textContent || '').trim();
+      const icon  = p.querySelector('icon')?.getAttribute('src') || '';
+      if (!tmp[ch]) tmp[ch] = [];
+      tmp[ch].push({title, desc, start, stop, icon});
+    });
+    for (const k in tmp) tmp[k].sort((a,b) => a.start - b.start);
+    allProgramsMap = tmp;
+    epgLoaded = true;
+    updateAllEPG();
+  } catch(e){ console.warn('EPG error:', e); }
+}
+function resolveEpgId(id){
+  if (!id) return null;
+  if (allProgramsMap[id]) return id;
+  const low = id.toLowerCase();
+  if (allProgramsMap[low]) return low;
+  const base = low.replace(/\..+$/, '');
+  return Object.keys(allProgramsMap).find(k => {
+    const kl = k.toLowerCase();
+    return kl === base || kl.includes(base) || base.includes(kl);
+  }) || null;
+}
+function findCurrentProgram(tvgId){
+  const key = resolveEpgId(tvgId);
+  if (!key) return null;
+  const now = new Date();
+  return (allProgramsMap[key] || []).find(x => now >= x.start && now < x.stop) || null;
+}
+function getNextPrograms(tvgId, limit){
+  const key = resolveEpgId(tvgId);
+  if (!key) return [];
+  const now = new Date();
+  return (allProgramsMap[key] || []).filter(x => x.start > now).slice(0, limit || 3);
+}
+function updateAllEPG(){
+  document.querySelectorAll('.card').forEach(card => {
+    const idx = +card.dataset.index;
+    if (isNaN(idx)) return;
+    const ch = channelsData[idx];
+    if (!ch) return;
+    const cur = findCurrentProgram(ch.tvgId);
+    const epgEl = card.querySelector('.ch-epg');
+    const timeEl = card.querySelector('.ch-time');
+    const thumbEl = card.querySelector('.card-thumb');
+    if (cur){
+      if (epgEl) epgEl.textContent = cur.title;
+      if (timeEl) timeEl.textContent = `${formatTime(cur.start)} - ${formatTime(cur.stop)}`;
+      if (thumbEl && cur.icon) thumbEl.style.backgroundImage = 'url(' + JSON.stringify(cur.icon) + ')';
+      else if (thumbEl && ch.logo) thumbEl.style.backgroundImage = 'url(' + JSON.stringify(ch.logo) + ')';
+    } else {
+      if (epgEl) epgEl.textContent = '';
+      if (timeEl) timeEl.textContent = '';
+      if (thumbEl && ch.logo) thumbEl.style.backgroundImage = 'url(' + JSON.stringify(ch.logo) + ')';
+    }
+  });
+}
+
+/* ============================================================
+   BUILD LAYOUT
+   ============================================================ */
+function buildLayout(){
+  const cont = document.getElementById('groups-container');
+  cont.innerHTML = '';
+  const groups = {};
+  const order = [];
+  channelsData.forEach((c, i) => {
+    const g = c.tag || 'Altri canali';
+    if (!groups[g]){ groups[g] = []; order.push(g); }
+    groups[g].push(i);
+  });
+  for (const g of order){
+    const gEl = document.createElement('div');
+    gEl.className = 'group';
+    const tEl = document.createElement('div');
+    tEl.className = 'group-title';
+    tEl.textContent = g;
+    gEl.appendChild(tEl);
+    const row = document.createElement('div');
+    row.className = 'row';
+    groups[g].forEach(idx => {
+      const c = channelsData[idx];
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.dataset.index = String(idx);
+      // NOTA: nessun tabindex, nessun listener, nessun cursor
+      const srcCount = (c.sources && c.sources.length) || 1;
+      const badgeHTML = srcCount > 1 ? `<div class="source-count-badge">${srcCount} SRC</div>` : '';
+      const fallbackHTML = c.logo ? '' : `<span class="thumb-fallback">${escapeHtml(initials(c.name))}</span>`;
+      card.innerHTML = `
+        <div class="card-thumb">${fallbackHTML}${badgeHTML}</div>
+        <div class="card-info">
+          <div class="card-channel">${escapeHtml(c.name)}</div>
+          <div class="ch-epg"></div>
+          <div class="ch-time"></div>
+        </div>`;
+      if (c.logo){
+        const thumb = card.querySelector('.card-thumb');
+        thumb.style.backgroundImage = 'url(' + JSON.stringify(c.logo) + ')';
+      }
+      row.appendChild(card);
+    });
+    gEl.appendChild(row);
+    cont.appendChild(gEl);
+  }
+  rebuildRowsCache();
+  if (epgLoaded) updateAllEPG();
+  focusR = 0; focusC = 0;
+  applyFocusVisual();
+}
+
+/* Click delegation sul container (le card non hanno listener) */
+document.getElementById('groups-container').addEventListener('click', e => {
+  const card = e.target.closest('.card');
+  if (!card) return;
+  const idx = +card.dataset.index;
+  if (!isNaN(idx)) openPopup(card, idx);
+});
+
+function rebuildRowsCache(){
+  rowsCache = [];
+  document.querySelectorAll('#groups-container .group').forEach(gEl => {
+    const row = gEl.querySelector('.row');
+    if (!row) return;
+    const cards = Array.from(row.querySelectorAll('.card')).filter(c => c.offsetParent !== null);
+    if (cards.length > 0) rowsCache.push({ group: gEl, row, cards });
+  });
+}
+
+/* ============================================================
+   FOCUS VISIVO
+   ============================================================ */
+function clearFocusedCard(){
+  if (focusedCard) focusedCard.classList.remove('focused');
+  focusedCard = null;
+}
+function applyFocusVisual(){
+  if (!rowsCache.length) return;
+  if (focusR < 0) focusR = 0;
+  if (focusR >= rowsCache.length) focusR = rowsCache.length - 1;
+  const r = rowsCache[focusR];
+  if (!r) return;
+  if (focusC < 0) focusC = 0;
+  if (focusC >= r.cards.length) focusC = r.cards.length - 1;
+
+  clearFocusedCard();
+  const card = r.cards[focusC];
+  if (!card) return;
+  card.classList.add('focused');
+  focusedCard = card;
+  ensureCardInView(card);
+}
+
+function setSaScroll(top){
+  programmaticScrollUntil = Date.now() + 200;
+  desiredScrollTop = top;
+  const sa = document.getElementById('scrollArea');
+  if (sa) sa.scrollTop = top;
+}
+
+function ensureCardInView(card){
+  if (!card) return;
+  const row = card.closest('.row');
+  if (row){
+    const cRect = card.getBoundingClientRect();
+    const rRect = row.getBoundingClientRect();
+    const padL = 30, padR = 40;
+    if (cRect.left < rRect.left + padL){
+      row.scrollLeft += (cRect.left - rRect.left) - padL;
+    } else if (cRect.right > rRect.right - padR){
+      row.scrollLeft += (cRect.right - rRect.right) + padR;
+    }
+  }
+  const rect = card.getBoundingClientRect();
+  const sa = document.getElementById('scrollArea');
+  if (!sa) return;
+  const saRect = sa.getBoundingClientRect();
+  const topBarH = 90;
+  const safeTop = saRect.top + topBarH;
+  const safeBot = saRect.bottom - 40;
+  let newTop = sa.scrollTop;
+  if (rect.top < safeTop){
+    newTop += (rect.top - safeTop);
+  } else if (rect.bottom > safeBot){
+    newTop += (rect.bottom - safeBot);
+  }
+  if (newTop !== sa.scrollTop){
+    setSaScroll(newTop);
+  } else {
+    desiredScrollTop = sa.scrollTop;
+  }
+}
+
+/* ============================================================
+   SCROLL GUARD
+   - Se il browser scrolla senza che sia io, ripristino
+   ============================================================ */
+const saEl = document.getElementById('scrollArea');
+saEl.addEventListener('scroll', () => {
+  if (Date.now() < programmaticScrollUntil) return;
+  // Il browser ha scrollato di sua iniziativa
+  if (Math.abs(saEl.scrollTop - desiredScrollTop) > 3){
+    programmaticScrollUntil = Date.now() + 200;
+    saEl.scrollTop = desiredScrollTop;
+  }
+}, { passive: true });
+
+/* Anche window.scrollY deve restare a 0 */
+window.addEventListener('scroll', () => {
+  if (window.scrollX !== 0 || window.scrollY !== 0){
+    window.scrollTo(0, 0);
+  }
+}, { passive: true });
+
+/* ============================================================
+   FOCUS GUARD
+   - Se il focus DOM va su un elemento diverso da #keycatcher e #searchInput,
+     lo riporto indietro su #keycatcher
+   ============================================================ */
+let focusGuardActive = false;
+document.addEventListener('focusin', e => {
+  const t = e.target;
+  if (!t || t === document.body) return;
+  if (t.id === 'keycatcher') return;
+  if (t.id === 'searchInput') return;
+  if (t.classList && t.classList.contains('source-btn')) return;
+  if (focusGuardActive) return;
+  focusGuardActive = true;
+  requestAnimationFrame(() => {
+    refocusCatcher();
+    focusGuardActive = false;
+  });
+}, true);
+
+/* ============================================================
+   MOVIMENTO
+   ============================================================ */
+function moveFocus(dir){
+  if (!rowsCache.length) return;
+  if (!focusedCard || !document.body.contains(focusedCard)){
+    applyFocusVisual();
+    return;
+  }
+  if (dir === 'left'){
+    if (focusC > 0){ focusC--; applyFocusVisual(); }
+    return;
+  }
+  if (dir === 'right'){
+    const r = rowsCache[focusR];
+    if (r && focusC < r.cards.length - 1){ focusC++; applyFocusVisual(); }
+    return;
+  }
+  if (dir === 'up' || dir === 'down'){
+    const delta = dir === 'up' ? -1 : 1;
+    let targetR = focusR + delta;
+    while (targetR >= 0 && targetR < rowsCache.length){
+      const tRow = rowsCache[targetR];
+      if (tRow && tRow.cards.length > 0){
+        focusR = targetR;
+        focusC = Math.min(focusC, tRow.cards.length - 1);
+        applyFocusVisual();
+        return;
+      }
+      targetR += delta;
+    }
+    if (dir === 'up'){
+      // Prima riga → sali sulla search box
+      setSaScroll(0);
+      const searchEl = document.getElementById('searchInput');
+      if (searchEl){
+        try { searchEl.focus(); } catch(_) {}
+      }
+    }
+    return;
+  }
+}
+
+/* ============================================================
+   KEY HANDLER UNICO
+   ============================================================ */
+function isPopupOpen(){
+  const p = document.getElementById('epg-popup');
+  return p && !p.classList.contains('hidden');
+}
+
+function refocusCatcher(){
+  const kc = document.getElementById('keycatcher');
+  if (!kc) return;
+  const active = document.activeElement;
+  if (active === kc) return;
+  // NON rubare il focus a search o ai bottoni sorgente
+  if (active && (
+        active.id === 'searchInput' ||
+        (active.classList && active.classList.contains('source-btn'))
+      )) {
+    return;
+  }
+  try { kc.focus({ preventScroll: true }); } catch(_) {
+    try { kc.focus(); } catch(__){}
+  }
+  if (document.activeElement !== kc){
+    setTimeout(() => {
+      try { kc.focus(); } catch(_){}
+    }, 0);
+  }
+}
+
+function masterKeyHandler(e){
+  const searchEl = document.getElementById('searchInput');
+  const inSearch = document.activeElement === searchEl;
+
+  if (isPopupOpen()) return;
+
+  // Nella search: lascia passare il testo, ma intercetta frecce verticali/esc
+    if (inSearch){
+    const kc0 = Number(e.keyCode) || Number(e.which) || 0;
+
+    // Backspace / Delete = modifica testo, NON "go back"
+    const isBackspace = kc0 === 8 || kc0 === 46
+                     || e.key === 'Backspace' || e.key === 'Delete';
+    if (isBackspace){
+      // lascia al browser: l'evento 'input' farà ripartire applySearch()
+      return;
+    }
+
+    if (isEscape(e)){
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      navLockUntil = Date.now() + NAV_LOCK_MS;
+      searchEl.blur();
+      refocusCatcher();
+      return;
+    }
+
+    const d = getDir(e);
+
+    if (d === 'down'){
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      navLockUntil = Date.now() + NAV_LOCK_MS;
+      searchEl.blur();
+      refocusCatcher();
+      if (!focusedCard) applyFocusVisual();
+      return;
+    }
+
+    if (d === 'up'){
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      return;
+    }
+
+    // left/right e digitazione passano normalmente
+    return;
+  }
+
+  // BLOCCO TOTALE
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  e.stopPropagation();
+  e.cancelBubble = true;
+  if ('returnValue' in e) e.returnValue = false;
+
+  if (e.repeat === true) return;
+
+  refocusCatcher();
+
+  if (Date.now() < navLockUntil) return;
+
+  const dir = getDir(e);
+  if (dir){
+    navLockUntil = Date.now() + NAV_LOCK_MS;
+    moveFocus(dir);
+    return;
+  }
+
+  if (isEnter(e)){
+    navLockUntil = Date.now() + NAV_LOCK_MS;
+    if (focusedCard && document.body.contains(focusedCard)){
+      openPopup(focusedCard, +focusedCard.dataset.index);
+    }
+    return;
+  }
+
+  if (e.key === '/' || (Number(e.keyCode) === 191)){
+    searchEl.focus();
+    searchEl.select();
+    return;
+  }
+}
+
+window.addEventListener('keydown', masterKeyHandler, { capture: true, passive: false });
+document.addEventListener('keydown', masterKeyHandler, { capture: true, passive: false });
+
+/* ============================================================
+   POPUP
+   ============================================================ */
+function openPopup(cardEl, i){
+  const c = channelsData[i];
+  if (!c) return;
+  const cur = findCurrentProgram(c.tvgId);
+  const coverSrc = (cur && cur.icon) || c.logo || DEFAULT_COVER;
+  const firstUrl = (c.sources && c.sources[0] && c.sources[0].url) || '';
+
+  const popup = document.getElementById('epg-popup');
+  const inner = popup.querySelector('.epg-inner');
+
+  const headerHTML = `
+    <div class="popup-header">
+      <img src="${escapeHtml(coverSrc)}" alt="" class="popup-cover"
+           data-focusable="1" data-type="cover" data-play-url="${escapeHtml(firstUrl)}"
+           onerror="this.src='${DEFAULT_COVER}'">
+      <div class="popup-header-info">
+        <div class="epg-title">${escapeHtml(cur ? cur.title : c.name)}</div>
+        ${cur ? `<div class="cover-time">⏱ <span>${formatTime(cur.start)} - ${formatTime(cur.stop)}</span></div>` : ''}
+      </div>
+    </div>`;
+
+  let descHTML;
+  if (cur && cur.desc){
+    descHTML = `
+      <div class="epg-desc-box" data-focusable="1" data-type="plot">
+        <div class="epg-desc-label"><span>📖 Trama</span><span class="scroll-hint">▲▼ scorri</span></div>
+        <div class="epg-desc">${escapeHtml(cur.desc)}</div>
+      </div>`;
+  } else {
+    descHTML = `
+      <div class="epg-desc-box">
+        <div class="epg-desc-label"><span>📖 Trama</span></div>
+        <div class="epg-desc">Nessuna descrizione disponibile.</div>
+      </div>`;
+  }
+
+  const srcs = c.sources || [];
+  const sourcesHTML = srcs.length ? `
+    <div class="sources-section">
+      <div class="sources-title">▶ ${srcs.length > 1 ? 'Scegli sorgente (' + srcs.length + ')' : 'Avvia canale'}</div>
+      ${srcs.map((s, k) => `
+        <button type="button" class="source-btn ${s.isBackup ? 'is-backup' : ''}"
+                data-focusable="1" data-type="source" data-play-url="${escapeHtml(s.url)}">
+          <span class="source-play">▶</span>
+          <span class="source-label">${escapeHtml(s.label)}</span>
+          <span class="source-badge">${s.isBackup ? 'BACKUP' : 'SRC ' + (k + 1)}</span>
+        </button>`).join('')}
+    </div>` : '';
+
+  const next = cur ? getNextPrograms(c.tvgId, 3) : [];
+  const nextHTML = next.length ? `
+    <div class="next-programs">
+      <div class="next-programs-title">In arrivo</div>
+      ${next.map(p => `<div class="next-program">
+        <img src="${escapeHtml(p.icon || DEFAULT_COVER)}" class="next-thumb" alt="" onerror="this.src='${DEFAULT_COVER}'">
+        <span class="next-program-time">${formatTime(p.start)}</span>
+        <span>${escapeHtml(p.title)}</span>
+      </div>`).join('')}
+    </div>` : '';
+
+  inner.innerHTML = headerHTML + descHTML + sourcesHTML + nextHTML;
+  popup.classList.remove('hidden');
+
+  try { history.pushState({epgOpen: true}, '', '#epg'); } catch(e){}
+
+  document.querySelector('.epg-popup-content').scrollTop = 0;
+
+  popupFocusables = Array.from(inner.querySelectorAll('[data-focusable="1"]'));
+  popupFocusIdx = 0;
+  popupFocusables.forEach(el => {
+    if (el.dataset.playUrl){
+      el.addEventListener('click', ev => {
+        ev.preventDefault(); ev.stopPropagation();
+        if (el.dataset.type === 'plot') return;
+        if (el.dataset.playUrl) playUrl(el.dataset.playUrl);
+      });
+    }
+  });
+  updatePopupFocus();
+}
+function updatePopupFocus(){
+  popupFocusables.forEach((el, i) => {
+    el.classList.toggle('popup-focused', i === popupFocusIdx);
+  });
+  const el = popupFocusables[popupFocusIdx];
+  if (el) ensurePopupScroll(el);
+}
+function ensurePopupScroll(el){
+  const pc = document.querySelector('.epg-popup-content');
+  if (!pc) return;
+  const m = 30;
+  const elR = el.getBoundingClientRect();
+  const pcR = pc.getBoundingClientRect();
+  if (elR.top < pcR.top + m) pc.scrollTop -= (pcR.top + m - elR.top);
+  else if (elR.bottom > pcR.bottom - m) pc.scrollTop += (elR.bottom - (pcR.bottom - m));
+}
+function playUrl(url){
+  if (!url) return;
+  try {
+    if (url.startsWith('intent://')) window.location.href = url;
+    else {
+      const w = window.open(url, '_blank');
+      if (!w) window.location.href = url;
+    }
+  } catch(e){ window.location.href = url; }
+}
+function _hidePopupUI(){
+  const popup = document.getElementById('epg-popup');
+  popup.classList.add('hidden');
+  popupFocusables = [];
+  popupFocusIdx = 0;
+  applyFocusVisual();
+  refocusCatcher();
+}
+function closePopup(){
+  if (history.state && history.state.epgOpen) {
+    history.back();
+  } else {
+    _hidePopupUI();
+  }
+}
+window.addEventListener('popstate', () => {
+  const popup = document.getElementById('epg-popup');
+  if (!popup.classList.contains('hidden')) _hidePopupUI();
+});
+
+function popupKeyHandler(e){
+  const popup = document.getElementById('epg-popup');
+  if (popup.classList.contains('hidden')) return;
+
+  if (isEscape(e)){
+    e.preventDefault(); e.stopImmediatePropagation();
+    closePopup();
+    return;
+  }
+
+  const dir = getDir(e);
+  if (dir === 'down' || dir === 'up'){
+    e.preventDefault(); e.stopImmediatePropagation();
+    if (e.repeat === true) return;
+    if (Date.now() < popupNavLockUntil) return;
+    popupNavLockUntil = Date.now() + NAV_LOCK_MS;
+
+    const d = dir === 'down' ? 1 : -1;
+    const curEl = popupFocusables[popupFocusIdx];
+
+    if (curEl && curEl.dataset.type === 'plot'){
+      const desc = curEl.querySelector('.epg-desc');
+      if (desc){
+        const step = 60;
+        const atTop = desc.scrollTop <= 1;
+        const atBot = desc.scrollTop + desc.clientHeight >= desc.scrollHeight - 2;
+        if (d === 1 && !atBot){ desc.scrollTop += step; return; }
+        if (d === -1 && !atTop){ desc.scrollTop -= step; return; }
+      }
+    }
+    if (d === 1 && popupFocusIdx === popupFocusables.length - 1){
+      const pc = document.querySelector('.epg-popup-content');
+      if (pc.scrollTop + pc.clientHeight < pc.scrollHeight - 2){
+        pc.scrollTop += 120; return;
+      }
+    }
+    if (d === -1 && popupFocusIdx === 0){
+      const pc = document.querySelector('.epg-popup-content');
+      if (pc.scrollTop > 0){ pc.scrollTop -= 120; return; }
+    }
+    let next = popupFocusIdx + d;
+    next = Math.max(0, Math.min(next, popupFocusables.length - 1));
+    if (next !== popupFocusIdx){ popupFocusIdx = next; updatePopupFocus(); }
+    return;
+  }
+
+  if (isEnter(e)){
+    e.preventDefault(); e.stopImmediatePropagation();
+    if (e.repeat === true) return;
+    const el = popupFocusables[popupFocusIdx];
+    if (el && el.dataset.type !== 'plot' && el.dataset.playUrl) playUrl(el.dataset.playUrl);
+  }
+}
+window.addEventListener('keydown', popupKeyHandler, { capture: true, passive: false });
+
+/* ============================================================
+   SEARCH
+   ============================================================ */
+const searchInput = document.getElementById('searchInput');
+let searchTimer = null;
+searchInput.addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  const q = searchInput.value;
+  searchTimer = setTimeout(() => applySearch(q), 150);
+});
+function applySearch(q){
+  const ql = q.trim().toLowerCase();
+  document.querySelectorAll('#groups-container .group').forEach(g => {
+    let any = false;
+    g.querySelectorAll('.card').forEach(card => {
+      const ch = channelsData[+card.dataset.index];
+      if (!ch){ card.style.display = 'none'; return; }
+      const cur = findCurrentProgram(ch.tvgId);
+      const hay = ((ch.name || '') + ' ' + (ch.tag || '') + ' ' + (cur ? cur.title : '')).toLowerCase();
+      const match = !ql || hay.includes(ql);
+      card.style.display = match ? '' : 'none';
+      if (match) any = true;
+    });
+    g.style.display = any ? '' : 'none';
+  });
+  rebuildRowsCache();
+  focusR = 0; focusC = 0;
+  clearFocusedCard();
+  applyFocusVisual();
+}
+
+/* ============================================================
+   INIT
+   ============================================================ */
+buildLayout();
+refocusCatcher();
+// Rilancia il focus periodicamente per sicurezza
+setInterval(refocusCatcher, 1000);
+
+downloadEPG();
+setInterval(() => { if (epgLoaded) updateAllEPG(); }, 60000);
+setInterval(() => { if (epgLoaded) downloadEPG(); }, 2 * 60 * 60 * 1000);
+</script>
+</body>
+</html>
