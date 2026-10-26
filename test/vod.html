@@ -215,6 +215,88 @@ main { position: relative; z-index: 3; padding-bottom: 100px; min-height: 40vh; 
   .episode-still { flex: none; width: 100%; }
   .episode-number-box { flex: none; flex-direction: row; gap: 8px; padding: 8px; }
 }
+
+/* ═══════════ SIDEBAR ═══════════ */
+#sidebar {
+  position: fixed; top: 0; left: 0; bottom: 0;
+  width: 280px; max-width: 82vw;
+  background: rgba(15,15,15,0.98);
+  backdrop-filter: blur(20px) saturate(140%);
+  border-right: 1px solid var(--border-soft);
+  z-index: 150;
+  transform: translateX(-100%);
+  transition: transform 0.32s cubic-bezier(.2,.8,.3,1);
+  padding: calc(var(--header-h) + 20px) 14px 24px;
+  display: flex; flex-direction: column; gap: 4px;
+  overflow-y: auto; scrollbar-width: none;
+}
+#sidebar::-webkit-scrollbar { display: none; }
+#sidebar.open { transform: translateX(0); box-shadow: 24px 0 60px rgba(0,0,0,0.6); }
+
+#sidebar-title {
+  font-family: var(--font-display); font-size: 0.78rem;
+  color: var(--text-muted); text-transform: uppercase;
+  letter-spacing: 1.2px; padding: 0 14px 12px; font-weight: 700;
+}
+.menu-item {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 16px; border-radius: var(--radius);
+  color: var(--text-secondary); font-size: 0.95rem; font-weight: 600;
+  text-align: left; width: 100%; outline: none; cursor: pointer;
+  position: relative;
+  transition: background 0.18s, color 0.18s, box-shadow 0.18s;
+}
+.menu-item .icon { font-size: 1.15rem; width: 22px; text-align: center; flex-shrink: 0; }
+.menu-item:hover { background: var(--surface-2); color: var(--text-primary); }
+.menu-item.focused {
+  background: rgba(229,9,20,0.15); color: #fff;
+  box-shadow: var(--focus-ring);
+}
+.menu-item.active { color: var(--jf-accent); }
+.menu-item.active::before {
+  content: ''; position: absolute; left: 0; top: 20%; bottom: 20%;
+  width: 3px; background: var(--jf-accent); border-radius: 0 3px 3px 0;
+}
+.menu-item.active.focused { color: #fff; }
+
+#sidebar-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+  z-index: 140; opacity: 0; pointer-events: none;
+  transition: opacity 0.32s;
+}
+#sidebar-overlay.open { opacity: 1; pointer-events: auto; }
+
+@media (max-width: 560px) {
+  #sidebar { width: 260px; padding-top: calc(var(--header-h) + 12px); }
+}
+/* ═══════════ GRID VIEW ═══════════ */
+#grid-container.grid-view {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 18px 14px;
+  padding: 8px 48px 80px;
+}
+#grid-container.grid-view .card {
+  width: auto;
+  min-width: 0;
+  flex: none;
+}
+#grid-container.grid-view .card:hover { transform: translateY(-3px); }
+#grid-container.grid-view .card.focused {
+  outline: 2px solid var(--jf-accent);
+  outline-offset: 3px;
+}
+
+@media (max-width: 900px) {
+  #grid-container.grid-view { padding: 8px 20px 50px; gap: 14px 12px; }
+}
+@media (max-width: 560px) {
+  #grid-container.grid-view {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 12px 10px;
+    padding: 8px 14px 40px;
+  }
+}
 .hidden { display: none !important; }
 </style>
 </head>
@@ -233,7 +315,18 @@ main { position: relative; z-index: 3; padding-bottom: 100px; min-height: 40vh; 
     <input id="search" type="search" placeholder="Cerca nel catalogo..." autocomplete="off"
            inputmode="search" autocapitalize="off" autocorrect="off" spellcheck="false" />
   </div>
+  
 </header>
+
+<aside id="sidebar" aria-label="Menu principale">
+  <div id="sidebar-title">Naviga</div>
+  <button class="menu-item" data-menu="home"><span class="icon">🏠</span>Home</button>
+  <button class="menu-item" data-menu="movie"><span class="icon">🎬</span>Film</button>
+  <button class="menu-item" data-menu="tv"><span class="icon">📺</span>Serie TV</button>
+  <button class="menu-item" data-menu="fav"><span class="icon">❤</span>Preferiti</button>
+  <button class="menu-item" data-menu="recent"><span class="icon">🕒</span>Recenti</button>
+</aside>
+<div id="sidebar-overlay"></div>
 
 <section id="hero">
   <img id="hero-backdrop" alt="" class="hidden" />
@@ -478,9 +571,234 @@ let heroFocusIndex = -1;
 
 const searchWrapEl = document.getElementById('search-wrap');
 const searchInputEl = document.getElementById('search');
+/* ═══════════ ENTER COOLDOWN (anti keydown fantasma) ═══════════ */
+let enterCooldownUntil = 0;
+const ENTER_COOLDOWN_MS = 600;
+function enterInCooldown(){ return Date.now() < enterCooldownUntil; }
+/* ═══════════ GRID STATE ═══════════ */
+let isGridView = false;
+let gridItems = [];
+let gridFocusedIndex = 0;
+let gridColsCache = 5;
+
+function computeGridCols() {
+  const grid = document.getElementById('grid-container');
+  if (!grid) return 5;
+  const st = getComputedStyle(grid);
+  const gap = parseFloat(st.columnGap) || 14;
+  const cardW = 150;
+  const w = grid.clientWidth;
+  return Math.max(2, Math.floor((w + gap) / (cardW + gap)));
+}
+
+function renderGridInto(container, items, isDynamic, removeLabel, onRemove) {
+  container.innerHTML = '';
+  gridColsCache = computeGridCols();
+  const frag = document.createDocumentFragment();
+  items.forEach((it, i) => {
+    const row = Math.floor(i / gridColsCache);
+    const col = i % gridColsCache;
+    const card = createCard(it, row, col, {
+      showRemove: isDynamic,
+      removeLabel,
+      onRemove,
+      gridIndex: i
+    });
+    frag.appendChild(card);
+  });
+  container.appendChild(frag);
+}
+
+function setGridFocus(index, scrollTo = true) {
+  if (!isGridView || gridItems.length === 0) return;
+  index = Math.max(0, Math.min(gridItems.length - 1, index));
+  gridFocusedIndex = index;
+  document.querySelectorAll('#grid-container .card.focused')
+    .forEach(c => c.classList.remove('focused'));
+  const card = document.querySelector(
+    `#grid-container .card[data-grid-index="${index}"]`);
+  if (!card) return;
+  card.classList.add('focused');
+  lastFocusedCard = card;
+  if (scrollTo) card.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+}
+
+function gridMoveFocus(direction) {
+  if (!isGridView || gridItems.length === 0) return;
+  gridColsCache = computeGridCols();
+  const total = gridItems.length;
+  const idx = gridFocusedIndex;
+  const col = idx % gridColsCache;
+
+  if (direction === 'left') {
+    if (col === 0) { openSidebar(); return; }
+    setGridFocus(idx - 1);
+  } else if (direction === 'right') {
+    if (col < gridColsCache - 1 && idx + 1 < total) setGridFocus(idx + 1);
+  } else if (direction === 'up') {
+    const n = idx - gridColsCache;
+    if (n < 0) { setSearchFocus(); return; }
+    setGridFocus(n);
+  } else if (direction === 'down') {
+    const n = idx + gridColsCache;
+    if (n < total) setGridFocus(n);
+  } else if (direction === 'enter') {
+    const card = document.querySelector(
+      `#grid-container .card[data-grid-index="${idx}"]`);
+    if (card) { lastFocusedCard = card; card.click(); }
+  }
+}
+
+/* ═══════════ SIDEBAR STATE ═══════════ */
+let sidebarOpen = false;
+let sidebarFocusedIndex = 0;
+let sidebarPrevState = null;
+let currentCategoryType = null;
+let currentCategoryTitle = null;
+
+function getMenuItems() { return document.querySelectorAll('#sidebar .menu-item'); }
+
+function renderSidebarFocus() {
+  const items = getMenuItems();
+  items.forEach((el, i) => el.classList.toggle('focused', i === sidebarFocusedIndex));
+  const active = items[sidebarFocusedIndex];
+  if (active) active.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+function openSidebar() {
+  if (sidebarOpen || isDetailOpen) return;
+  sidebarPrevState = { heroFocusIndex, searchFocused, focusedRow, focusedCol };
+  sidebarOpen = true;
+  sidebarFocusedIndex = 0;
+  document.getElementById('sidebar').classList.add('open');
+  document.getElementById('sidebar-overlay').classList.add('open');
+  document.querySelectorAll('.card.focused').forEach(c => c.classList.remove('focused'));
+  getHeroButtons().forEach(b => b.classList.remove('focused'));
+  searchWrapEl.classList.remove('focused');
+  updateSidebarActive();
+  renderSidebarFocus();
+}
+
+function closeSidebar(restoreFocus = true) {
+  if (!sidebarOpen) return;
+  sidebarOpen = false;
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('open');
+  document.querySelectorAll('#sidebar .menu-item.focused').forEach(el => el.classList.remove('focused'));
+
+  const state = sidebarPrevState;
+  sidebarPrevState = null;
+  if (!restoreFocus || isDetailOpen) return;
+
+  if (!state) { if (currentView === 'home') setHeroFocus(0); return; }
+  if (state.heroFocusIndex >= 0) { setHeroFocus(state.heroFocusIndex); return; }
+  if (state.searchFocused) { setSearchFocus(); return; }
+  if (rows[state.focusedRow] && rows[state.focusedRow].items.length > 0) {
+    setFocus(state.focusedRow, state.focusedCol);
+    return;
+  }
+  if (currentView === 'home') setHeroFocus(0);
+}
+
+function updateSidebarActive() {
+  getMenuItems().forEach(el => {
+    const id = el.dataset.menu;
+    let active = false;
+    if (id === 'home' && currentView === 'home') active = true;
+    if (currentView === 'category' && currentCategoryType === id) active = true;
+    el.classList.toggle('active', active);
+  });
+}
+
+function activateSidebarItem(idx) {
+  const el = getMenuItems()[idx];
+  if (!el) return;
+  const id = el.dataset.menu;
+  closeSidebar(false);
+
+  if (id === 'home')                     renderHome();
+  else if (id === 'movie')               renderCategoryView('movie', '🎬 Tutti i Film');
+  else if (id === 'tv')                  renderCategoryView('tv', '📺 Tutte le Serie TV');
+  else if (id === 'fav')                 renderCategoryView('fav', '❤ I tuoi preferiti');
+  else if (id === 'recent')              renderCategoryView('recent', '🕒 Visti di recente');
+}
+
+/* Viste categoria: elenco completo ordinato dal più recente */
+function renderCategoryView(type, title, opts = {}) {
+  currentView = 'category';
+  currentCategoryType = type;
+  currentCategoryTitle = title;
+  isGridView = true;
+  gridFocusedIndex = 0;
+  document.getElementById('hero').style.display = 'none';
+  heroFocusIndex = -1;
+  searchFocused = false;
+  searchWrapEl.classList.remove('focused');
+
+  let items;
+  if (type === 'movie')        items = CATALOG.filter(x => x.type === 'movie')
+                                  .sort((a, b) => (Number(b.year) || 0) - (Number(a.year) || 0));
+  else if (type === 'tv')      items = CATALOG.filter(x => x.type === 'tv')
+                                  .sort((a, b) => (Number(b.year) || 0) - (Number(a.year) || 0));
+  else if (type === 'fav')     items = favorites.slice();
+  else if (type === 'recent')  items = recents.slice();
+  else items = [];
+
+  rows = []; focusedRow = 0; focusedCol = 0;
+  gridItems = items;
+  const app = document.getElementById('app');
+  app.innerHTML = '';
+
+  if (items.length === 0) {
+    isGridView = false;
+    app.innerHTML = `<div class="empty-state"><div class="icon">📭</div><h3>${esc(title)}</h3>
+      <p>${type === 'fav' ? 'Aggiungi qualcosa ai preferiti!' : 'Nessun contenuto.'}</p></div>`;
+    updateSidebarActive();
+    return;
+  }
+
+  const header = document.createElement('div');
+  header.className = 'view-header';
+  const sub = (type === 'movie' || type === 'tv')
+    ? `${items.length} titoli · dal più recente`
+    : `${items.length} titol${items.length === 1 ? 'o' : 'i'}`;
+  header.innerHTML = `<h1>${esc(title)}</h1><p>${sub}</p>`;
+  app.appendChild(header);
+
+  const grid = document.createElement('div');
+  grid.id = 'grid-container';
+  grid.className = 'grid-view';
+  app.appendChild(grid);
+
+  const isDynamic = (type === 'fav' || type === 'recent');
+  renderGridInto(
+    grid, items, isDynamic,
+    type === 'fav' ? 'Rimuovi dai preferiti' : 'Rimuovi dai recenti',
+    type === 'fav' ? removeFavorite : removeFromRecent
+  );
+
+  rows.push({ title, items, type });
+  updateSidebarActive();
+
+  const focusIdx = opts.focusIndex != null ? opts.focusIndex : 0;
+  setTimeout(() => {
+    if (isGridView && gridItems.length > 0) {
+      setGridFocus(Math.min(focusIdx, gridItems.length - 1), true);
+    }
+  }, 100);
+}
+
+/* Listener sidebar (delegato + overlay) */
+document.getElementById('sidebar').addEventListener('click', (e) => {
+  const item = e.target.closest('.menu-item');
+  if (!item) return;
+  const idx = Array.from(getMenuItems()).indexOf(item);
+  if (idx >= 0) activateSidebarItem(idx);
+});
+document.getElementById('sidebar-overlay').addEventListener('click', () => closeSidebar(true));
 
 /* ═══════════ LONG-PRESS OK (telecomando) ═══════════ */
-const HOLD_MS = 800;
+const HOLD_MS = 600;
 let enterIsHeld = false;
 let enterWasLongPress = false;
 let enterHoldTimer = null;
@@ -497,6 +815,7 @@ function startEnterHold(item, rowType, cardEl){
   if (cardEl) cardEl.classList.add('holding');
   enterHoldTimer = setTimeout(() => {
     enterWasLongPress = true;
+	enterCooldownUntil = Date.now() + ENTER_COOLDOWN_MS;
     enterHoldTimer = null;
     if (enterHoldCardEl) enterHoldCardEl.classList.remove('holding');
     const it = enterHoldItem;
@@ -571,9 +890,14 @@ function toggleFavorite(item){
 function removeFavorite(item){
   const key = itemKey(item);
   const idx = favorites.findIndex(x => itemKey(x) === key);
-  if (idx >= 0){ favorites.splice(idx, 1); saveFavorites(); }
+  if (idx < 0) return;
+  favorites.splice(idx, 1);
+  saveFavorites();
   updateDetailActions(item);
-  refreshHomeAfterChange();
+
+  const focusOpts = { afterRemove: true };
+  if (isGridView) focusOpts.focusIndex = Math.max(0, Math.min(gridFocusedIndex, favorites.length - 1));
+  refreshHomeAfterChange(focusOpts);
 }
 
 function addToRecent(item){
@@ -590,32 +914,67 @@ function addToRecent(item){
 function removeFromRecent(item){
   const key = itemKey(item);
   const idx = recents.findIndex(x => itemKey(x) === key);
-  if (idx >= 0){ recents.splice(idx, 1); saveRecents(); }
+  if (idx < 0) return;
+  recents.splice(idx, 1);
+  saveRecents();
   updateDetailActions(item);
-  refreshHomeAfterChange();
+
+  const focusOpts = { afterRemove: true };
+  if (isGridView) focusOpts.focusIndex = Math.max(0, Math.min(gridFocusedIndex, recents.length - 1));
+  refreshHomeAfterChange(focusOpts);
 }
 
-function refreshHomeAfterChange(){
-  if (currentView !== 'home') return;
-  if (isDetailOpen){ homeDirty = true; return; }
-  rebuildHomePreservingFocus();
+let homeDirtyOpts = null;
+
+function refreshHomeAfterChange(opts = {}){
+  if (currentView === 'home'){
+    if (isDetailOpen){ homeDirty = true; homeDirtyOpts = opts; return; }
+    rebuildHomePreservingFocus(opts);
+    return;
+  }
+  if (currentView === 'category' && (currentCategoryType === 'fav' || currentCategoryType === 'recent')){
+    if (isDetailOpen){ homeDirty = true; homeDirtyOpts = opts; return; }
+    renderCategoryView(currentCategoryType, currentCategoryTitle, {
+      focusIndex: opts.focusIndex
+    });
+  }
 }
 
-function rebuildHomePreservingFocus(){
+function rebuildHomePreservingFocus(opts = {}){
   const wasHeroFocused = heroFocusIndex >= 0;
   const prevHeroIndex = heroFocusIndex;
   const prevRow = focusedRow;
   const prevCol = focusedCol;
   const prevItem = rows[prevRow] && rows[prevRow].items ? rows[prevRow].items[prevCol] : null;
   const prevKey = prevItem ? itemKey(prevItem) : null;
+  const prevRowType = rows[prevRow] ? rows[prevRow].type : null;
   const scrollY = window.scrollY;
 
   renderHome({ skipHeroFocus: true });
-
   window.scrollTo(0, scrollY);
 
   if (wasHeroFocused){
     setHeroFocus(prevHeroIndex);
+    return;
+  }
+
+  /* Se stiamo rimuovendo da Preferiti/Recenti, NON cercare lo stesso film
+     in altre righe: resta sulla stessa riga dinamica (o adiacente se sparisce) */
+  if (opts.afterRemove && (prevRowType === 'fav' || prevRowType === 'recent')){
+    const targetRow = rows.findIndex(r => r.type === prevRowType);
+    if (targetRow >= 0 && rows[targetRow].items.length > 0){
+      const newCol = Math.min(prevCol, rows[targetRow].items.length - 1);
+      setFocus(targetRow, newCol);
+      return;
+    }
+    /* Riga sparita (vuota): vai alla riga più vicina sopra, poi sotto */
+    for (let r = Math.min(prevRow, rows.length - 1); r >= 0; r--){
+      if (rows[r].items && rows[r].items.length > 0){ setFocus(r, 0); return; }
+    }
+    for (let r = 0; r < rows.length; r++){
+      if (rows[r].items && rows[r].items.length > 0){ setFocus(r, 0); return; }
+    }
+    setHeroFocus(0);
     return;
   }
 
@@ -664,6 +1023,7 @@ function setHeroFocus(index){
 
 /* ═══════════ SEARCH FOCUS ═══════════ */
 function activateSearch(){
+if (sidebarOpen) closeSidebar(false);
   searchFocused = true;
   heroFocusIndex = -1;
   getHeroButtons().forEach(b => b.classList.remove('focused'));
@@ -775,7 +1135,7 @@ function createCard(item, rowIndex, colIndex, options = {}){
   cap.appendChild(h3);
   cap.appendChild(p);
   card.appendChild(cap);
-
+  if (options.gridIndex != null) card.dataset.gridIndex = options.gridIndex;
   card.addEventListener('click', () => {
     lastFocusedCard = card;
     openDetail(item);
@@ -875,6 +1235,7 @@ function materializeRow(index, section){
 
 /* ═══════════ HOME ═══════════ */
 function renderHome(opts = {}){
+  isGridView = false;
   homeDirty = false;
   currentView = 'home';
   heroFocusIndex = -1;
@@ -975,6 +1336,8 @@ if (tvShows.length > 0) rowDefs.push({ title: '📺 Serie TV', items: tvShows.sl
   if (!opts.skipHeroFocus){
     setTimeout(() => setHeroFocus(0), 150);
   }
+ 
+  updateSidebarActive();
 }
 
 function renderHero(item){
@@ -1064,6 +1427,9 @@ function prefetchRows(from){
 function moveFocus(direction){
   if (isDetailOpen) return;
 
+  /* ── GRID VIEW: delega tutto a gridMoveFocus ── */
+  if (isGridView) { gridMoveFocus(direction); return; }
+
   if (heroFocusIndex >= 0){
     if (direction === 'down'){
       heroFocusIndex = -1;
@@ -1074,7 +1440,10 @@ function moveFocus(direction){
       return;
     }
     if (direction === 'up'){ heroFocusIndex = -1; getHeroButtons().forEach(b => b.classList.remove('focused')); setSearchFocus(); return; }
-    if (direction === 'left' && heroFocusIndex > 0) return setHeroFocus(heroFocusIndex - 1);
+    if (direction === 'left'){
+      if (heroFocusIndex > 0) return setHeroFocus(heroFocusIndex - 1);
+      return openSidebar();
+    }
     if (direction === 'right' && heroFocusIndex < 1) return setHeroFocus(heroFocusIndex + 1);
     return;
   }
@@ -1083,20 +1452,27 @@ function moveFocus(direction){
     if (direction === 'down'){
       searchWrapEl.classList.remove('focused');
       searchFocused = false;
-      setHeroFocus(0);
+      if (currentView === 'home') setHeroFocus(0);
+      else if (rows.length > 0 && rows[0].items.length > 0) setFocus(0, 0);
     }
+    if (direction === 'left') { openSidebar(); return; }
     return;
   }
 
   if (rows.length === 0) return;
 
   if (direction === 'up'){
-    if (focusedRow === 0){ setHeroFocus(0); return; }
+    if (focusedRow === 0){
+      if (currentView === 'home') { setHeroFocus(0); return; }
+      if (currentView === 'search') { setSearchFocus(); return; }
+      return;
+    }
     focusedRow--; focusedCol = 0; setFocus(focusedRow, focusedCol);
   } else if (direction === 'down'){
     if (focusedRow < rows.length - 1){ focusedRow++; focusedCol = 0; setFocus(focusedRow, focusedCol); }
   } else if (direction === 'left'){
     if (focusedCol > 0) setFocus(focusedRow, focusedCol - 1);
+    else openSidebar();
   } else if (direction === 'right'){
     const row = rows[focusedRow];
     if (focusedCol < row.items.length - 1) setFocus(focusedRow, focusedCol + 1);
@@ -1116,6 +1492,7 @@ detailCloseBtn.addEventListener('click', closeDetail);
 overlay.addEventListener('click', (e) => { if (e.target === overlay) closeDetail(); });
 
 async function openDetail(item){
+  if (sidebarOpen) closeSidebar(false);
   isDetailOpen = true;
   currentDetailItem = item;
   currentSeasons = [];
@@ -1332,9 +1709,28 @@ function closeDetail(){
   document.getElementById('episodes-list').innerHTML = '';
   document.getElementById('season-chips').innerHTML = '';
 
-  if (currentView === 'home' && homeDirty){
-    homeDirty = false;
-    rebuildHomePreservingFocus();
+ if (currentView === 'home' && homeDirty){
+  homeDirty = false;
+  const opts = homeDirtyOpts || {};
+  homeDirtyOpts = null;
+  rebuildHomePreservingFocus(opts);
+  return;
+}
+if (currentView === 'category' && homeDirty){
+  homeDirty = false;
+  const opts = homeDirtyOpts || {};
+  homeDirtyOpts = null;
+  renderCategoryView(currentCategoryType, currentCategoryTitle, {
+    focusIndex: opts.focusIndex
+  });
+  return;
+}
+
+  if (isGridView && gridItems.length > 0) {
+    const idx = (lastFocusedCard && lastFocusedCard.dataset.gridIndex != null)
+      ? parseInt(lastFocusedCard.dataset.gridIndex, 10)
+      : gridFocusedIndex;
+    setGridFocus(idx, true);
     return;
   }
 
@@ -1357,6 +1753,7 @@ searchInputEl.addEventListener('input', () => {
 });
 
 function performSearch(query){
+isGridView = false;
   currentView = 'search';
   document.getElementById('hero').style.display = 'none';
   heroFocusIndex = -1;
@@ -1443,6 +1840,29 @@ function navigateDetail(key){
 document.addEventListener('keydown', (e) => {
   const key = e.key;
   const inputHasFocus = document.activeElement === searchInputEl;
+  /* Blocca Enter durante il cooldown post long-press */
+if (key === 'Enter' && enterInCooldown()){
+  e.preventDefault();
+  return;
+}
+  /* ── SIDEBAR: intercetta tutti i tasti quando è aperta ── */
+if (sidebarOpen){
+  if (key === 'ArrowUp'){
+    e.preventDefault();
+    sidebarFocusedIndex = Math.max(0, sidebarFocusedIndex - 1);
+    renderSidebarFocus(); return;
+  }
+  if (key === 'ArrowDown'){
+    e.preventDefault();
+    sidebarFocusedIndex = Math.min(getMenuItems().length - 1, sidebarFocusedIndex + 1);
+    renderSidebarFocus(); return;
+  }
+  if (key === 'Enter'){ e.preventDefault(); activateSidebarItem(sidebarFocusedIndex); return; }
+  if (['ArrowLeft','ArrowRight','Escape','Backspace'].includes(key)){
+    e.preventDefault(); closeSidebar(true); return;
+  }
+  e.preventDefault(); return;
+}
 
   if (key === 'Enter' && enterIsHeld){
     e.preventDefault();
@@ -1450,22 +1870,30 @@ document.addEventListener('keydown', (e) => {
   }
 
   if (key === 'Enter'){
-    const onDynamic = !isDetailOpen
-      && heroFocusIndex < 0
-      && !searchFocused
-      && !inputHasFocus
-      && rows[focusedRow]
-      && (rows[focusedRow].type === 'fav' || rows[focusedRow].type === 'recent');
+  let holdItem = null, holdCardEl = null, holdRowType = null;
 
-    if (onDynamic){
-      e.preventDefault();
-      const item = rows[focusedRow].items[focusedCol];
-      const rowType = rows[focusedRow].type;
-      const cardEl = document.querySelector(`.card[data-row="${focusedRow}"][data-col="${focusedCol}"]`);
-      if (item) startEnterHold(item, rowType, cardEl);
-      return;
-    }
+  if (isGridView && !isDetailOpen
+      && (currentCategoryType === 'fav' || currentCategoryType === 'recent')) {
+    holdItem = gridItems[gridFocusedIndex];
+    holdCardEl = document.querySelector(
+      `#grid-container .card[data-grid-index="${gridFocusedIndex}"]`);
+    holdRowType = currentCategoryType;
+  } else if (!isDetailOpen && !isGridView
+             && heroFocusIndex < 0 && !searchFocused && !inputHasFocus
+             && rows[focusedRow]
+             && (rows[focusedRow].type === 'fav' || rows[focusedRow].type === 'recent')) {
+    holdItem = rows[focusedRow].items[focusedCol];
+    holdCardEl = document.querySelector(
+      `.card[data-row="${focusedRow}"][data-col="${focusedCol}"]`);
+    holdRowType = rows[focusedRow].type;
   }
+
+  if (holdItem){
+    e.preventDefault();
+    startEnterHold(holdItem, holdRowType, holdCardEl);
+    return;
+  }
+}
 
   if (key === 'Enter'){
     if (searchFocused && !inputHasFocus){ e.preventDefault(); activateSearch(); return; }
@@ -1503,7 +1931,10 @@ document.addEventListener('keydown', (e) => {
         searchInputEl.blur();
         searchWrapEl.classList.remove('focused');
         searchFocused = false;
-        setHeroFocus(0);
+        if (currentView === 'home') setHeroFocus(0);
+		else if (isGridView && gridItems.length > 0) setGridFocus(0, true);
+		else if (rows.length > 0 && rows[0].items.length > 0) setFocus(0, 0);
+		
         return;
       }
       if (key === 'ArrowUp'){ e.preventDefault(); searchInputEl.blur(); setSearchFocus(); return; }
@@ -1519,19 +1950,32 @@ document.addEventListener('keydown', (e) => {
   }
 
   if (key === 'Delete' || key === 'Del'){
-    if (inputHasFocus) return;
-    if (isDetailOpen) return;
-    if (heroFocusIndex >= 0 || searchFocused) return;
-    const row = rows[focusedRow];
-    if (!row) return;
-    if (row.type !== 'fav' && row.type !== 'recent') return;
-    const item = row.items[focusedCol];
-    if (!item) return;
-    e.preventDefault();
-    if (row.type === 'fav') removeFavorite(item);
-    else removeFromRecent(item);
+  if (inputHasFocus) return;
+  if (isDetailOpen) return;
+  if (heroFocusIndex >= 0 || searchFocused) return;
+
+  if (isGridView){
+    if (currentCategoryType === 'fav' || currentCategoryType === 'recent'){
+      const item = gridItems[gridFocusedIndex];
+      if (item){
+        e.preventDefault();
+        if (currentCategoryType === 'fav') removeFavorite(item);
+        else removeFromRecent(item);
+      }
+    }
     return;
   }
+
+  const row = rows[focusedRow];
+  if (!row) return;
+  if (row.type !== 'fav' && row.type !== 'recent') return;
+  const item = row.items[focusedCol];
+  if (!item) return;
+  e.preventDefault();
+  if (row.type === 'fav') removeFavorite(item);
+  else removeFromRecent(item);
+  return;
+}
 
   if (key === 'Escape' || key === 'Backspace'){
     if (inputHasFocus && key === 'Backspace') return;
@@ -1541,12 +1985,23 @@ document.addEventListener('keydown', (e) => {
     if (searchFocused){ e.preventDefault(); setHeroFocus(0); return; }
     if (isDetailOpen){ e.preventDefault(); closeDetail(); return; }
     if (currentView === 'search'){ e.preventDefault(); searchInputEl.value = ''; renderHome(); return; }
+	if (currentView === 'category'){ e.preventDefault(); renderHome(); return; }
     return;
   }
 });
 
 document.addEventListener('keyup', (e) => {
   if (e.key !== 'Enter') return;
+  /* Se siamo in cooldown, consuma l'evento senza cliccare */
+if (enterInCooldown()){
+  enterIsHeld = false;
+  enterWasLongPress = false;
+  enterHoldItem = null;
+  enterHoldRowType = null;
+  enterHoldCardEl = null;
+  if (enterHoldTimer){ clearTimeout(enterHoldTimer); enterHoldTimer = null; }
+  return;
+}
   if (!enterIsHeld) return;
 
   const wasLong = enterWasLongPress;
@@ -1584,6 +2039,63 @@ if ('serviceWorker' in navigator) {
       .catch(e => console.warn('[sw] ERRORE:', e.message));
   });
 }
+/* ═══════════ SWIPE GESTURES ═══════════ */
+let swipeStartX = 0, swipeStartY = 0, swipeStartT = 0, swipeTracking = false, swipeStartTarget = null;
+
+function isInScrollable(el){
+  while (el && el !== document.body && el !== document.documentElement){
+    if (el.classList){
+      if (el.classList.contains('row-scroll')) return true;
+      if (el.classList.contains('season-chips')) return true;
+    }
+    el = el.parentElement;
+  }
+  return false;
+}
+
+document.addEventListener('touchstart', (e) => {
+  if (e.touches.length !== 1) return;
+  swipeStartX = e.touches[0].clientX;
+  swipeStartY = e.touches[0].clientY;
+  swipeStartT = Date.now();
+  swipeStartTarget = e.target;
+  swipeTracking = true;
+}, { passive: true });
+
+document.addEventListener('touchend', (e) => {
+  if (!swipeTracking) return;
+  swipeTracking = false;
+  const t = e.changedTouches[0];
+  const dx = t.clientX - swipeStartX;
+  const dy = t.clientY - swipeStartY;
+  const dt = Date.now() - swipeStartT;
+
+  if (dt > 800) return;
+  if (Math.abs(dx) < 60) return;
+  if (Math.abs(dy) > Math.abs(dx) * 0.8) return;
+
+  if (dx < 0) {
+    /* Swipe a SINISTRA */
+    if (sidebarOpen) { closeSidebar(true); return; }
+    /* Apre solo se partita dal bordo sinistro oppure fuori da una lista scrollabile */
+    if (swipeStartX < 60 || !isInScrollable(swipeStartTarget)) openSidebar();
+  } else {
+    /* Swipe a DESTRA: chiude */
+    if (sidebarOpen) closeSidebar(true);
+  }
+}, { passive: true });
+
+let _gridResizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(_gridResizeTimer);
+  _gridResizeTimer = setTimeout(() => {
+    if (isGridView && gridItems.length > 0) {
+      const card = document.querySelector(
+        `#grid-container .card[data-grid-index="${gridFocusedIndex}"]`);
+      if (card) card.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+  }, 200);
+});
 </script>
 
 </body>
