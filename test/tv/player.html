@@ -278,7 +278,7 @@ async function loadChannel(index){
     selectItalianAudio();
     lockResolution();
     video.play().catch(()=>{
-      video.muted=true;
+      video.muted=false;
       video.play().catch(()=>{});
       showStatus('🔇 Tocca 🔊 per attivare l\'audio',5000);
     });
