@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NERODAY · Player</title>
+<style>
+:root{--bg:#000;--red:#e50914;--red-2:#f6121d;--text:#fff;--muted:#b3b3b3;--dim:#808080}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden;background:#000;color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased}
+#app{height:100vh;position:relative}
+#video-container{width:100%;height:100%;background:#000;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden}
+video{width:100%;height:100%;object-fit:contain}
+
+#back-btn{
+  position:absolute;top:20px;left:20px;z-index:1005;
+  background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.18);
+  color:#fff;padding:8px 16px;border-radius:4px;font-size:13px;font-weight:600;
+  cursor:pointer;display:flex;align-items:center;gap:8px;
+  transition:background .2s,transform .15s;backdrop-filter:blur(8px);
+  font-family:inherit
+}
+#back-btn:hover{background:rgba(229,9,20,.85)}
+#back-btn:active{transform:scale(.96)}
+
+#watermark{position:absolute;bottom:20px;right:20px;z-index:999;opacity:.5;pointer-events:none}
+#watermark img{width:48px;height:auto;display:block}
+
+#status{position:absolute;top:22px;left:50%;transform:translateX(-50%);z-index:3000;background:rgba(0,0,0,.88);color:#fff;padding:11px 24px;border-radius:4px;display:none;font-size:13px;font-weight:500;letter-spacing:.3px;box-shadow:0 8px 28px rgba(0,0,0,.7);border-left:3px solid var(--red);max-width:82vw}
+
+#osd-bar{
+  position:absolute;left:0;right:0;bottom:0;z-index:1003;display:none;
+  padding:100px 48px 48px;
+  background:linear-gradient(to top,rgba(0,0,0,.95) 0%,rgba(0,0,0,.78) 42%,rgba(0,0,0,0) 100%);
+  pointer-events:none;
+  animation:osdIn .28s ease
+}
+@keyframes osdIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+#osd-bar>*{pointer-events:auto}
+#osd-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+#osd-date-time{font-size:11px;color:var(--dim);letter-spacing:2px;text-transform:uppercase}
+#osd-controls{display:flex;gap:8px}
+.osd-btn{
+  background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);
+  color:#fff;width:38px;height:38px;border-radius:50%;cursor:pointer;
+  font-size:16px;display:flex;align-items:center;justify-content:center;
+  transition:background .2s,transform .15s;font-family:inherit
+}
+.osd-btn:hover{background:rgba(255,255,255,.18)}
+.osd-btn:active{transform:scale(.94)}
+
+#osd-programs-container{display:flex;gap:46px;align-items:flex-end;max-width:1500px}
+#osd-current-program{flex:2;min-width:0}
+#osd-current-program-info{display:flex;gap:18px;align-items:flex-start}
+#osd-current-poster{width:92px;height:132px;object-fit:cover;border-radius:5px;background:#1a1a1a;flex-shrink:0;box-shadow:0 8px 24px rgba(0,0,0,.8)}
+#osd-text-block{flex:1;min-width:0}
+#osd-channel-info{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+#osd-channel-logo{height:30px;max-width:130px;object-fit:contain}
+#osd-channel-name{font-size:12px;font-weight:700;letter-spacing:2px;color:var(--muted);text-transform:uppercase}
+#osd-resolution{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.22);border-radius:3px;padding:2px 7px;font-size:9px;font-weight:700;letter-spacing:1px;color:#ddd}
+#osd-live-indicator{display:flex;align-items:center;gap:6px;font-size:9px;font-weight:700;letter-spacing:2px;color:var(--red-2)}
+#osd-live-indicator::after{content:'LIVE'}
+.live-dot{width:7px;height:7px;border-radius:50%;background:var(--red);box-shadow:0 0 10px var(--red);animation:pulse 1.6s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+#osd-program-title{font-size:27px;font-weight:800;letter-spacing:-.6px;line-height:1.15;margin-bottom:6px;color:#fff}
+#osd-program-time{font-size:13px;color:var(--muted);margin-bottom:8px;font-variant-numeric:tabular-nums;font-weight:600}
+#osd-program-desc{font-size:13px;color:var(--dim);line-height:1.55;margin-bottom:14px;max-height:62px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
+#osd-progress-bar{width:100%;height:4px;background:rgba(255,255,255,.22);border-radius:2px;overflow:hidden}
+#osd-progress-fill{height:100%;background:var(--red);width:0%;border-radius:2px;transition:width .4s linear}
+#osd-future-programs{flex:1;display:flex;flex-direction:column;gap:10px;min-width:0;max-width:460px}
+.future-program{display:flex;gap:12px;align-items:center;padding:9px 12px;background:rgba(255,255,255,.055);border-radius:5px;border-left:2px solid rgba(229,9,20,.55);min-width:0}
+.program-poster{width:40px;height:60px;object-fit:cover;border-radius:3px;background:#1a1a1a;flex-shrink:0}
+.program-title{font-size:12px;font-weight:700;margin-bottom:3px;color:#e8e8e8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.program-time{font-size:11px;color:var(--red-2);margin-bottom:3px;font-variant-numeric:tabular-nums;font-weight:600}
+.program-desc{font-size:11px;color:var(--dim);max-height:30px;overflow:hidden;line-height:1.35}
+#osd-current-poster:not([src]),#osd-next-poster:not([src]),#osd-third-poster:not([src]){visibility:hidden}
+
+@media(max-width:900px){
+  #osd-bar{padding:70px 20px 24px}
+  #osd-programs-container{flex-direction:column;align-items:stretch;gap:14px}
+  #osd-future-programs{flex-direction:row;max-width:none}
+  .future-program{flex:1}
+  #osd-program-title{font-size:19px}
+  #osd-current-poster{width:62px;height:90px}
+  #osd-program-desc{display:none}
+  .program-desc{display:none}
+  #back-btn{top:12px;left:12px;padding:6px 12px;font-size:12px}
+  #osd-controls .osd-btn{width:34px;height:34px;font-size:14px}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="video-container">
+    <video id="player" playsinline></video>
+    
+    <div id="watermark"><img src="https://alemagno1994alex-glitch.github.io/autoupdate/images/logo.png" alt="Logo"></div>
+    <div id="status"></div>
+    <div id="osd-bar">
+      <div id="osd-header">
+        <span id="osd-date-time">--/--/---- --:--</span>
+        <div id="osd-controls">
+          <button id="btn-play" class="osd-btn" title="Play/Pausa">⏸</button>
+          <button id="btn-mute" class="osd-btn" title="Muto">🔊</button>
+          <button id="btn-fs" class="osd-btn" title="Schermo intero">⛶</button>
+        </div>
+      </div>
+      <div id="osd-programs-container">
+        <div id="osd-current-program">
+          <div id="osd-current-program-info">
+            <img id="osd-current-poster" alt="">
+            <div id="osd-text-block">
+              <div id="osd-channel-info">
+                <img id="osd-channel-logo" alt="">
+                <span id="osd-channel-name"></span>
+                <span id="osd-resolution">--p</span>
+                <div id="osd-live-indicator"><div class="live-dot"></div></div>
+              </div>
+              <div id="osd-program-title">Programma attuale</div>
+              <div id="osd-program-time">--:-- - --:--</div>
+              <div id="osd-program-desc"></div>
+              <div id="osd-progress-bar"><div id="osd-progress-fill"></div></div>
+            </div>
+          </div>
+        </div>
+        <div id="osd-future-programs">
+          <div class="future-program">
+            <img id="osd-next-poster" class="program-poster" alt="">
+            <div style="min-width:0">
+              <div class="program-title" id="osd-next-title">Prossimo...</div>
+              <div class="program-time" id="osd-next-time"></div>
+              <div class="program-desc" id="osd-next-desc"></div>
+            </div>
+          </div>
+          <div class="future-program">
+            <img id="osd-third-poster" class="program-poster" alt="">
+            <div style="min-width:0">
+              <div class="program-title" id="osd-third-title">Dopo...</div>
+              <div class="program-time" id="osd-third-time"></div>
+              <div class="program-desc" id="osd-third-desc"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.11.2/shaka-player.compiled.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+<script src="common.js"></script>
+<script>
+shaka.polyfill.installAll();
+
+const video=document.getElementById('player');
+const osdBar=document.getElementById('osd-bar');
+let player,currentIndex=0,osdTimeout=null,loadingChannel=false;
+let lastCurrentPoster='',lastNextPoster='',lastThirdPoster='';
+
+function showStatus(msg,ms=3500){const s=document.getElementById('status');s.textContent=msg;s.style.display='block';clearTimeout(showStatus._t);showStatus._t=setTimeout(()=>s.style.display='none',ms)}
+function formatTime(d){return App.formatTime(d)}
+function formatDate(d){return App.formatDate(d)}
+
+/* ---- Poster ---- */
+function setPoster(el,url,fallback){
+  const steps=[];
+  if(url){steps.push(App.getProxiedImageUrl(url));steps.push(url)}
+  if(fallback)steps.push(fallback);
+  let i=0;
+  el.onerror=()=>{i++;if(i<steps.length)el.src=steps[i];else{el.onerror=null;el.removeAttribute('src')}};
+  if(steps.length)el.src=steps[0];else el.removeAttribute('src');
+}
+
+/* ---- OSD ---- */
+function updateOSD(){
+  const ch=App.state.channels[currentIndex];
+  if(!ch)return;
+  const now=new Date(),$=id=>document.getElementById(id);
+  $('osd-date-time').textContent=`${formatDate(now)} ${formatTime(now)}`;
+  $('osd-channel-logo').src=ch.logo||'';
+  $('osd-channel-name').textContent=ch.name||'';
+
+  const {current,next,third}=App.findCurrentAndNextPrograms(ch.tvgId);
+
+  if(current){
+    $('osd-program-title').textContent=current.title;
+    $('osd-program-time').textContent=`${formatTime(current.start)} - ${formatTime(current.stop)}`;
+    $('osd-program-desc').textContent=current.desc||'Descrizione non disponibile';
+    const np=current.icon||'';
+    if(np!==lastCurrentPoster){lastCurrentPoster=np;setPoster($('osd-current-poster'),np,ch.logo)}
+    const total=current.stop-current.start,elapsed=now-current.start;
+    $('osd-progress-fill').style.width=`${Math.min(100,Math.max(0,(elapsed/total)*100))}%`;
+  }else{
+    if(lastCurrentPoster!==''){lastCurrentPoster='';$('osd-current-poster').removeAttribute('src')}
+    $('osd-program-title').textContent='EPG non disponibile';
+    $('osd-program-time').textContent='';
+    $('osd-program-desc').textContent='';
+    $('osd-progress-fill').style.width='0%';
+  }
+
+  if(next){
+    $('osd-next-title').textContent=`Prossimo: ${next.title}`;
+    $('osd-next-time').textContent=`${formatTime(next.start)} - ${formatTime(next.stop)}`;
+    $('osd-next-desc').textContent=next.desc||'';
+    const np2=next.icon||'';
+    if(np2!==lastNextPoster){lastNextPoster=np2;setPoster($('osd-next-poster'),np2,ch.logo)}
+  }else{
+    if(lastNextPoster!==''){lastNextPoster='';$('osd-next-poster').removeAttribute('src')}
+    $('osd-next-title').textContent='Prossimo: Nessuna info';
+    $('osd-next-time').textContent='';
+    $('osd-next-desc').textContent='';
+  }
+
+  if(third){
+    $('osd-third-title').textContent=`Dopo: ${third.title}`;
+    $('osd-third-time').textContent=`${formatTime(third.start)} - ${formatTime(third.stop)}`;
+    $('osd-third-desc').textContent=third.desc||'';
+    const tp=third.icon||'';
+    if(tp!==lastThirdPoster){lastThirdPoster=tp;setPoster($('osd-third-poster'),tp,ch.logo)}
+  }else{
+    if(lastThirdPoster!==''){lastThirdPoster='';$('osd-third-poster').removeAttribute('src')}
+    $('osd-third-title').textContent='Dopo: Nessuna info';
+    $('osd-third-time').textContent='';
+    $('osd-third-desc').textContent='';
+  }
+
+  try{
+    const t=player.getVariantTracks().find(t=>t.active);
+    $('osd-resolution').textContent=t&&t.height?`${t.height}p`:'--p';
+  }catch(_){$('osd-resolution').textContent='--p'}
+}
+
+function showOSD(){
+  osdBar.style.display='block';
+  document.getElementById('watermark').style.visibility='hidden';
+  updateOSD();
+  clearTimeout(osdTimeout);
+  osdTimeout=setTimeout(hideOSD,8000);
+}
+function hideOSD(){
+  osdBar.style.display='none';
+  document.getElementById('watermark').style.visibility='visible';
+}
+function toggleOSD(){
+  if(osdBar.style.display==='block')hideOSD();else showOSD();
+}
+
+/* ---- Player ---- */
+function selectItalianAudio(){try{const c=['it','ita','italian'];const t=player.getVariantTracks().find(t=>t.language&&c.some(x=>t.language.toLowerCase().includes(x)));if(t)player.selectVariantTrack(t,false)}catch(e){}}
+function lockResolution(){
+  try{
+    const MAX_H=720;
+    const tracks=player.getVariantTracks();
+    const lang=(tracks.find(t=>t.active)||tracks[0]||{}).language;
+    const same=tracks.filter(t=>t.language===lang&&t.height);
+    if(!same.length)return;
+    const ok=same.filter(t=>t.height<=MAX_H).sort((a,b)=>b.height-a.height);
+    const pick=ok[0]||same.sort((a,b)=>a.height-b.height)[0];
+    player.selectVariantTrack(pick,false);
+  }catch(e){console.warn('lockResolution:',e)}
+}
+
+async function loadChannel(index){
+  const channels=App.state.channels;
+  if(index<0||index>=channels.length)return;
+  if(loadingChannel)return;
+  loadingChannel=true;
+  const ch=channels[index];
+  currentIndex=index;
+  App.saveLastChannel(index);
+  document.title=ch.name+' · NERODAY';
+  showStatus('🔄 '+ch.name,2000);
+  try{
+    await player.unload();
+    player.configure({drm:{clearKeys:ch.drmKey||{}}});
+    player.configure({abr:{enabled:false}});
+    await player.load(ch.manifestUrl);
+    selectItalianAudio();
+    lockResolution();
+    video.play().catch(()=>{
+      video.muted=true;
+      video.play().catch(()=>{});
+      showStatus('🔇 Tocca 🔊 per attivare l\'audio',5000);
+    });
+    lastCurrentPoster=lastNextPoster=lastThirdPoster='';
+    if(osdBar.style.display==='block')updateOSD();
+  }catch(e){
+    console.error('Errore:',e);
+    showStatus('❌ '+e.message,5000);
+  }finally{
+    loadingChannel=false;
+  }
+}
+
+function togglePlay(){
+  if(video.paused)video.play();else video.pause();
+}
+function updatePlayBtn(){
+  const b=document.getElementById('btn-play');
+  if(b)b.textContent=video.paused?'▶':'⏸';
+}
+function updateMuteBtn(){
+  const b=document.getElementById('btn-mute');
+  if(b)b.textContent=video.muted?'🔇':'🔊';
+}
+document.getElementById('btn-play').onclick=()=>{togglePlay();updatePlayBtn()};
+document.getElementById('btn-mute').onclick=()=>{video.muted=!video.muted;updateMuteBtn()};
+document.getElementById('btn-fs').onclick=()=>{
+  if(!document.fullscreenElement)document.documentElement.requestFullscreen().catch(()=>{});
+  else document.exitFullscreen();
+};
+video.addEventListener('play',updatePlayBtn);
+video.addEventListener('pause',updatePlayBtn);
+video.addEventListener('volumechange',updateMuteBtn);
+
+function changeResolution(){
+  try{
+    const c=player.getVariantTracks().find(t=>t.active);
+    if(!c)return showStatus('❌ Nessuna traccia');
+    const s=player.getVariantTracks().filter(t=>t.language===c.language);
+    if(s.length<=1)return showStatus('❌ Nessuna altra risoluzione');
+    const i=s.findIndex(t=>t.id===c.id);
+    const n=s[(i+1)%s.length];
+    player.configure({abr:{enabled:false}});
+    player.selectVariantTrack(n,false);
+    showStatus(`📺 ${n.height}p`);
+  }catch(e){showStatus('❌ Errore')}
+}
+function toggleSubtitles(){
+  try{
+    const t=player.getTextTracks();
+    if(!t.length)return showStatus('❌ Nessun sottotitolo');
+    const a=t.find(x=>x.active);
+    if(a){player.setTextTrackVisibility(false);showStatus('📝 OFF')}
+    else{player.setTextTrackVisibility(true);player.selectTextTrack(t[0]);showStatus('📝 ON')}
+  }catch(e){showStatus('❌ Errore')}
+}
+
+/* ---- Interazioni video ---- */
+video.addEventListener('click',e=>{
+  e.stopPropagation();
+  toggleOSD();
+});
+
+document.addEventListener('keydown',e=>{
+  switch(e.key){
+    case ' ':
+      e.preventDefault();
+      togglePlay();
+      updatePlayBtn();
+      break;
+    case 'Enter':
+      e.preventDefault();
+      toggleOSD();
+      break;
+    case 'Escape':
+    case 'Backspace':
+      e.preventDefault();
+      location.href='index.html';
+      break;
+    case 'ArrowUp':
+      e.preventDefault();
+      changeResolution();
+      break;
+    case 'ArrowDown':
+      e.preventDefault();
+      toggleSubtitles();
+      break;
+    case 'ArrowRight':
+      e.preventDefault();
+      if(currentIndex<App.state.channels.length-1)loadChannel(currentIndex+1);
+      break;
+    case 'ArrowLeft':
+      e.preventDefault();
+      if(currentIndex>0)loadChannel(currentIndex-1);
+      break;
+    case 'f':
+    case 'F':
+      document.getElementById('btn-fs').click();
+      break;
+  }
+});
+
+/* ---- Init ---- */
+async function init(){
+  if(!shaka.Player.isBrowserSupported()){showStatus('Browser non supportato',10000);return}
+  player=new shaka.Player();
+  await player.attach(video);
+  player.configure({
+    mediaSource:{codecSwitchingStrategy:shaka.config.CodecSwitchingStrategy.RELOAD},
+    streaming:{lowLatencyMode:true,bufferingGoal:15,rebufferingGoal:2,bufferBehind:15,ignoreTextStreamFailures:true},
+    preferredAudioLanguage:'it',
+    preferredTextLanguage:'it',
+    preferredAudioChannelCount:2
+  });
+  player.addEventListener('error',e=>{console.error('Player error:',e);showStatus('❌ Errore player')});
+  player.addEventListener('trackschanged',selectItalianAudio);
+
+  // Carica playlist
+  try{
+    await App.loadPlaylist();
+  }catch(e){
+    showStatus('❌ Playlist: '+e.message,10000);
+    return;
+  }
+  if(!App.state.channels.length){showStatus('❌ Nessun canale disponibile',10000);return}
+
+  // Parametri URL: ?name=... (fallback ?ch=N, poi last channel)
+  const params=new URLSearchParams(location.search);
+  const reqName=params.get('name');
+  const reqIndex=parseInt(params.get('ch')??'-1');
+  let idx=-1;
+  if(reqName)idx=App.state.channels.findIndex(c=>c.name===reqName);
+  if(idx<0&&reqIndex>=0)idx=Math.max(0,Math.min(App.state.channels.length-1,reqIndex));
+  if(idx<0)idx=Math.min(App.loadLastChannel(),App.state.channels.length-1);
+
+  await loadChannel(idx);
+  updatePlayBtn();
+  updateMuteBtn();
+
+  // EPG in background
+  App.loadEPG().then(()=>{if(osdBar.style.display==='block')updateOSD()}).catch(e=>console.warn('EPG:',e));
+
+  // Refresh OSD live (barra progresso)
+  setInterval(()=>{if(osdBar.style.display==='block')updateOSD()},5000);
+
+  // Mostra OSD all'avvio
+  showOSD();
+}
+window.addEventListener('DOMContentLoaded',init);
+</script>
+</body>
+</html>
