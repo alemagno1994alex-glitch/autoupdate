@@ -280,7 +280,7 @@ async function loadChannel(index){
     video.play().catch(()=>{
       video.muted=false;
       video.play().catch(()=>{});
-      showStatus('🔇 Tocca 🔊 per attivare l\'audio',5000);
+     // showStatus('🔇 Tocca 🔊 per attivare l\'audio',5000);
     });
     lastCurrentPoster=lastNextPoster=lastThirdPoster='';
     if(osdBar.style.display==='block')updateOSD();
