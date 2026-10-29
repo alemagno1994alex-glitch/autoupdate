@@ -336,14 +336,71 @@ function toggleSubtitles(){
   }catch(e){showStatus('❌ Errore')}
 }
 
+/* ---- Seek avanti/indietro con feedback tempo ---- */
+function getLiveTime() {
+  // Ora "reale" a cui corrisponde la posizione corrente (solo per live)
+  if (!player || !player.isLive()) return null;
+  try {
+    const range = player.seekRange();
+    const behind = Math.max(0, range.end - video.currentTime);
+    return new Date(Date.now() - behind * 1000);
+  } catch (e) { return null; }
+}
+
+function fmtClock(d) {
+  if (!d) return '--:--:--';
+  return d.toLocaleTimeString('it-IT', {
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    timeZone: 'Europe/Rome'
+  });
+}
+
+function fmtBehind(sec) {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function seekRelative(delta) {
+  if (!player) return;
+
+  if (player.isLive()) {
+    // LIVE: clamp dentro il seekRange, mostra ora reale + quanto sei indietro
+    const range = player.seekRange();
+    const target = Math.max(range.start, Math.min(range.end, video.currentTime + delta));
+    video.currentTime = target;
+
+    const behind = range.end - target;
+    if (behind < 1) {
+      showStatus('🔴 LIVE', 2000);
+    } else {
+      const liveTime = getLiveTime();
+      showStatus(`${delta > 0 ? '⏩' : '⏪'} ${fmtClock(liveTime)} · ${fmtBehind(behind)} indietro`, 2500);
+    }
+  } else {
+    // VOD: clamp tra 0 e duration
+    const target = Math.max(0, Math.min(video.duration || 0, video.currentTime + delta));
+    video.currentTime = target;
+    showStatus(`${delta > 0 ? '⏩' : '⏪'} ${fmtBehind(target)} / ${fmtBehind(video.duration || 0)}`, 2000);
+  }
+
+  // se l'OSD è aperto, aggiorna subito la barra
+  if (osdBar.style.display === 'block') updateOSD();
+}
+
 /* ---- Interazioni video ---- */
 video.addEventListener('click',e=>{
   e.stopPropagation();
   toggleOSD();
 });
 
-document.addEventListener('keydown',e=>{
-  switch(e.key){
+document.addEventListener('keydown', e => {
+  // ==== Tasti telecomando Sky/NOW/Android TV ====
+  if (e.keyCode === 227) { e.preventDefault(); seekRelative(-10); return; } // ⏪
+  if (e.keyCode === 228) { e.preventDefault(); seekRelative(+10); return; } // ⏩
+  if (e.keyCode === 179) { e.preventDefault(); togglePlay(); updatePlayBtn(); return; } // play/pausa
+
+  switch (e.key) {
     case ' ':
       e.preventDefault();
       togglePlay();
@@ -356,7 +413,7 @@ document.addEventListener('keydown',e=>{
     case 'Escape':
     case 'Backspace':
       e.preventDefault();
-      location.href='index.html';
+      location.href = 'index.html';
       break;
     case 'ArrowUp':
       e.preventDefault();
@@ -366,13 +423,21 @@ document.addEventListener('keydown',e=>{
       e.preventDefault();
       toggleSubtitles();
       break;
-    case 'ArrowRight':
-      e.preventDefault();
-      if(currentIndex<App.state.channels.length-1)loadChannel(currentIndex+1);
-      break;
     case 'ArrowLeft':
       e.preventDefault();
-      if(currentIndex>0)loadChannel(currentIndex-1);
+      seekRelative(-10);   // ⏪ 10 sec
+      break;
+    case 'ArrowRight':
+      e.preventDefault();
+      seekRelative(+10);   // ⏩ 10 sec
+      break;
+    case 'PageUp':
+      e.preventDefault();
+      if (currentIndex < App.state.channels.length - 1) loadChannel(currentIndex + 1);
+      break;
+    case 'PageDown':
+      e.preventDefault();
+      if (currentIndex > 0) loadChannel(currentIndex - 1);
       break;
     case 'f':
     case 'F':
