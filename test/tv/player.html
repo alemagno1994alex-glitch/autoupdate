@@ -17,11 +17,10 @@ video{width:100%;height:100%;object-fit:contain}
   background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.18);
   color:#fff;padding:8px 16px;border-radius:4px;font-size:13px;font-weight:600;
   cursor:pointer;display:flex;align-items:center;gap:8px;
-  transition:background .2s,transform .15s;backdrop-filter:blur(8px);
   font-family:inherit
 }
 #back-btn:hover{background:rgba(229,9,20,.85)}
-#back-btn:active{transform:scale(.96)}
+
 
 #status{position:absolute;top:22px;left:50%;transform:translateX(-50%);z-index:3000;background:rgba(0,0,0,.88);color:#fff;padding:11px 24px;border-radius:4px;display:none;font-size:13px;font-weight:500;letter-spacing:.3px;box-shadow:0 8px 28px rgba(0,0,0,.7);border-left:3px solid var(--red);max-width:82vw}
 
@@ -30,8 +29,8 @@ video{width:100%;height:100%;object-fit:contain}
   padding:100px 48px 48px;
   background:linear-gradient(to top,rgba(0,0,0,.95) 0%,rgba(0,0,0,.78) 42%,rgba(0,0,0,0) 100%);
   pointer-events:none;
-  animation:osdIn .28s ease
 }
+
 @keyframes osdIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 #osd-bar>*{pointer-events:auto}
 #osd-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
@@ -41,15 +40,14 @@ video{width:100%;height:100%;object-fit:contain}
   background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);
   color:#fff;width:38px;height:38px;border-radius:50%;cursor:pointer;
   font-size:16px;display:flex;align-items:center;justify-content:center;
-  transition:background .2s,transform .15s;font-family:inherit
+  font-family:inherit
 }
 .osd-btn:hover{background:rgba(255,255,255,.18)}
-.osd-btn:active{transform:scale(.94)}
 
 #osd-programs-container{display:flex;gap:46px;align-items:flex-end;max-width:1500px}
 #osd-current-program{flex:2;min-width:0}
 #osd-current-program-info{display:flex;gap:18px;align-items:flex-start}
-#osd-current-poster{width:92px;height:132px;object-fit:cover;border-radius:5px;background:#1a1a1a;flex-shrink:0;box-shadow:0 8px 24px rgba(0,0,0,.8)}
+#osd-current-poster{width:92px;height:132px;object-fit:cover;border-radius:5px;background:#1a1a1a;flex-shrink:0}
 #osd-text-block{flex:1;min-width:0}
 #osd-channel-info{display:flex;align-items:center;gap:12px;margin-bottom:10px}
 #osd-channel-logo{height:30px;max-width:130px;object-fit:contain}
@@ -57,13 +55,13 @@ video{width:100%;height:100%;object-fit:contain}
 #osd-resolution{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.22);border-radius:3px;padding:2px 7px;font-size:9px;font-weight:700;letter-spacing:1px;color:#ddd}
 #osd-live-indicator{display:flex;align-items:center;gap:6px;font-size:9px;font-weight:700;letter-spacing:2px;color:var(--red-2)}
 #osd-live-indicator::after{content:'LIVE'}
-.live-dot{width:7px;height:7px;border-radius:50%;background:var(--red);box-shadow:0 0 10px var(--red);animation:pulse 1.6s infinite}
+.live-dot{width:7px;height:7px;border-radius:50%;background:var(--red)}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
 #osd-program-title{font-size:27px;font-weight:800;letter-spacing:-.6px;line-height:1.15;margin-bottom:6px;color:#fff}
 #osd-program-time{font-size:13px;color:var(--muted);margin-bottom:8px;font-variant-numeric:tabular-nums;font-weight:600}
 #osd-program-desc{font-size:13px;color:var(--dim);line-height:1.55;margin-bottom:14px;max-height:62px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
 #osd-progress-bar{width:100%;height:4px;background:rgba(255,255,255,.22);border-radius:2px;overflow:hidden}
-#osd-progress-fill{height:100%;background:var(--red);width:0%;border-radius:2px;transition:width .4s linear}
+#osd-progress-fill{height:100%;background:var(--red);width:0%;border-radius:2px}
 #osd-future-programs{flex:1;display:flex;flex-direction:column;gap:10px;min-width:0;max-width:460px}
 .future-program{display:flex;gap:12px;align-items:center;padding:9px 12px;background:rgba(255,255,255,.055);border-radius:5px;border-left:2px solid rgba(229,9,20,.55);min-width:0}
 .program-poster{width:40px;height:60px;object-fit:cover;border-radius:3px;background:#1a1a1a;flex-shrink:0}
