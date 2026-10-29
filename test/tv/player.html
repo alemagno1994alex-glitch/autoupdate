@@ -23,9 +23,6 @@ video{width:100%;height:100%;object-fit:contain}
 #back-btn:hover{background:rgba(229,9,20,.85)}
 #back-btn:active{transform:scale(.96)}
 
-#watermark{position:absolute;bottom:20px;right:20px;z-index:999;opacity:.5;pointer-events:none}
-#watermark img{width:48px;height:auto;display:block}
-
 #status{position:absolute;top:22px;left:50%;transform:translateX(-50%);z-index:3000;background:rgba(0,0,0,.88);color:#fff;padding:11px 24px;border-radius:4px;display:none;font-size:13px;font-weight:500;letter-spacing:.3px;box-shadow:0 8px 28px rgba(0,0,0,.7);border-left:3px solid var(--red);max-width:82vw}
 
 #osd-bar{
@@ -93,8 +90,7 @@ video{width:100%;height:100%;object-fit:contain}
 <div id="app">
   <div id="video-container">
     <video id="player" autoplay playsinline></video>
-    
-    <div id="watermark"><img src="https://alemagno1994alex-glitch.github.io/autoupdate/images/logo.png" alt="Logo"></div>
+        
     <div id="status"></div>
     <div id="osd-bar">
       <div id="osd-header">
@@ -232,14 +228,14 @@ function updateOSD(){
 
 function showOSD(){
   osdBar.style.display='block';
-  document.getElementById('watermark').style.visibility='hidden';
+  
   updateOSD();
   clearTimeout(osdTimeout);
   osdTimeout=setTimeout(hideOSD,8000);
 }
 function hideOSD(){
   osdBar.style.display='none';
-  document.getElementById('watermark').style.visibility='visible';
+  
 }
 function toggleOSD(){
   if(osdBar.style.display==='block')hideOSD();else showOSD();
